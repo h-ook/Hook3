@@ -238,7 +238,8 @@ async function startServer() {
     try {
       const exchange = (req.query.exchange as ExchangeId) || 'binance';
       const market = (req.query.market as MarketType) || 'futures';
-      const symbol = (req.query.symbol as string) || 'BTCUSDT';
+      const rawSymbol = (req.query.symbol as string) || 'BTCUSDT';
+      const symbol = rawSymbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const timeframe = (req.query.timeframe as Timeframe) || '1h';
       const limit = req.query.limit ? Math.min(Math.max(parseInt(req.query.limit as string, 10) || 500, 10), 1000) : 500;
 
