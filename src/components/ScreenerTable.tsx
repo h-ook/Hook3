@@ -90,6 +90,24 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
                       {coin.marketType === 'futures' ? 'FUT' : 'SPOT'}
                     </span>
                   </div>
+
+                  {/* Mobile mini range if available */}
+                  {coin.highPrice24h && coin.lowPrice24h && coin.highPrice24h > coin.lowPrice24h ? (
+                    <div className="sm:hidden mt-1 pt-1 border-t border-slate-800/60 flex items-center gap-1 text-[9px] text-slate-400">
+                      <span className="text-[8px] text-slate-500">L:</span>
+                      <span>${formatPrice(coin.lowPrice24h)}</span>
+                      <div className="h-1 w-10 bg-slate-800 rounded-full overflow-hidden flex-1 max-w-[50px]">
+                        <div
+                          className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full"
+                          style={{
+                            width: `${Math.min(100, Math.max(0, ((coin.currentPrice - coin.lowPrice24h) / (coin.highPrice24h - coin.lowPrice24h)) * 100))}%`
+                          }}
+                        />
+                      </div>
+                      <span className="text-[8px] text-slate-500">H:</span>
+                      <span>${formatPrice(coin.highPrice24h)}</span>
+                    </div>
+                  ) : null}
                 </td>
 
                 {/* Exchange */}

@@ -844,7 +844,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                     {sortBy === 'priceChange' && (sortOrder === 'desc' ? <ChevronDown className="w-3 h-3 text-cyan-400" /> : <ChevronUp className="w-3 h-3 text-cyan-400" />)}
                   </div>
                 </th>
-                <th className="py-3 px-3.5 font-semibold text-center hidden md:table-cell">
+                <th className="py-3 px-3.5 font-semibold text-center whitespace-nowrap min-w-[130px]">
                   24h Range (Low - High)
                 </th>
                 <th
@@ -876,7 +876,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                 </th>
                 <th
                   onClick={() => handleHeaderSort('volatility')}
-                  className="py-3 px-3.5 font-semibold text-right cursor-pointer hover:text-white transition-colors hidden sm:table-cell"
+                  className="py-3 px-3.5 font-semibold text-right cursor-pointer hover:text-white transition-colors whitespace-nowrap min-w-[90px]"
                 >
                   <div className="flex items-center justify-end gap-1.5">
                     <span>{t('volatility')}</span>
@@ -972,6 +972,50 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                               {coin.marketType}
                             </span>
                           </div>
+
+                          {/* Android / iOS & small screens: inline preview of 24h Range & 5m Volatility */}
+                          <div className="md:hidden mt-2 pt-1.5 border-t border-slate-800/60 flex flex-col gap-1 max-w-[200px]">
+                            {/* 24h Range Mini Bar */}
+                            <div className="space-y-0.5">
+                              <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono">
+                                <span>L: ${formatCryptoPrice(coin.low24h)}</span>
+                                <span>H: ${formatCryptoPrice(coin.high24h)}</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    coin.isNearHigh
+                                      ? 'bg-gradient-to-r from-emerald-500 to-purple-500'
+                                      : coin.isNearLow
+                                      ? 'bg-gradient-to-r from-rose-500 to-blue-500'
+                                      : 'bg-gradient-to-r from-cyan-500 to-indigo-500'
+                                  }`}
+                                  style={{ width: `${pricePosition}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 5m Volatility Badge */}
+                            <div className="flex items-center justify-between text-[10px] pt-0.5">
+                              <span className="text-slate-500 text-[9px]">Вол. 5m:</span>
+                              {(() => {
+                                const vol = coin.volatility5mPct !== undefined ? coin.volatility5mPct : (coin.volatility24hPct * 0.12);
+                                return (
+                                  <span
+                                    className={`font-mono font-bold text-[10px] px-1.5 py-0.5 rounded ${
+                                      vol >= 1.5
+                                        ? 'text-amber-400 bg-amber-500/15 border border-amber-500/30'
+                                        : vol >= 0.6
+                                        ? 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/30'
+                                        : 'text-slate-300 bg-slate-800'
+                                    }`}
+                                  >
+                                    ⚡ {vol.toFixed(2)}%
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-1 ml-1">
@@ -1032,9 +1076,9 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                     </td>
 
                     {/* 24h Range Bar */}
-                    <td className="py-3 px-3.5 hidden md:table-cell">
-                      <div className="w-36 mx-auto space-y-1">
-                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                    <td className="py-3 px-3.5 whitespace-nowrap">
+                      <div className="w-32 sm:w-36 mx-auto space-y-1">
+                        <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                           <span>${formatCryptoPrice(coin.low24h)}</span>
                           <span>${formatCryptoPrice(coin.high24h)}</span>
                         </div>
@@ -1085,18 +1129,18 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                     </td>
 
                     {/* Volatility (5m timeframe) */}
-                    <td className="py-3 px-3.5 text-right hidden sm:table-cell">
+                    <td className="py-3 px-3.5 text-right whitespace-nowrap">
                       {(() => {
                         const vol = coin.volatility5mPct !== undefined ? coin.volatility5mPct : (coin.volatility24hPct * 0.12);
                         return (
                           <div className="flex items-center justify-end gap-1.5">
                             <span
-                              className={`text-xs font-mono ${
+                              className={`text-xs font-mono font-bold ${
                                 vol >= 1.5
-                                  ? 'text-amber-400 font-bold'
+                                  ? 'text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30'
                                   : vol >= 0.6
-                                  ? 'text-emerald-400 font-medium'
-                                  : 'text-slate-400'
+                                  ? 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded'
+                                  : 'text-slate-300'
                               }`}
                             >
                               {vol.toFixed(2)}%
@@ -1202,20 +1246,26 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                   </div>
                 </div>
 
-                {/* 24h Range Bar */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                    <span>Low: ${formatCryptoPrice(coin.low24h)}</span>
-                    <span>High: ${formatCryptoPrice(coin.high24h)}</span>
+                {/* 24h Range Bar Block */}
+                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5 shadow-sm">
+                  <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                    <span className="flex items-center gap-1">
+                      <span className="text-[9px] text-slate-500 uppercase font-semibold">Low:</span>
+                      <strong className="text-slate-300 font-bold">${formatCryptoPrice(coin.low24h)}</strong>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-[9px] text-slate-500 uppercase font-semibold">High:</span>
+                      <strong className="text-slate-300 font-bold">${formatCryptoPrice(coin.high24h)}</strong>
+                    </span>
                   </div>
-                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                  <div className="h-2 w-full bg-slate-800/90 rounded-full overflow-hidden relative shadow-inner">
                     <div
                       className={`h-full rounded-full transition-all ${
                         coin.isNearHigh
-                          ? 'bg-gradient-to-r from-emerald-500 to-purple-500'
+                          ? 'bg-gradient-to-r from-emerald-500 to-purple-500 shadow-sm shadow-purple-500/50'
                           : coin.isNearLow
-                          ? 'bg-gradient-to-r from-rose-500 to-blue-500'
-                          : 'bg-gradient-to-r from-cyan-500 to-indigo-500'
+                          ? 'bg-gradient-to-r from-rose-500 to-blue-500 shadow-sm shadow-blue-500/50'
+                          : 'bg-gradient-to-r from-cyan-500 to-indigo-500 shadow-sm shadow-cyan-500/50'
                       }`}
                       style={{ width: `${pricePosition}%` }}
                     />
@@ -1231,23 +1281,23 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                 </div>
 
                 {/* Card Footer: Volume + Volatility 5m + Action Buttons */}
-                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">Оборот 24г</span>
-                    <span className="font-bold font-mono text-slate-300">
+                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs gap-1.5">
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-500 block leading-tight">Оборот 24г</span>
+                    <span className="font-bold font-mono text-slate-300 text-xs sm:text-sm">
                       {formatVolume(coin.volumeUsd)}
                     </span>
                   </div>
 
-                  <div className="text-center">
-                    <span className="text-[10px] text-slate-500 block">Волатильність 5m</span>
+                  <div className="text-center px-2 py-1 rounded-xl bg-slate-950/70 border border-slate-800/80">
+                    <span className="text-[9px] text-slate-400 block font-medium leading-tight">Волатильність 5m</span>
                     {(() => {
                       const vol = coin.volatility5mPct !== undefined ? coin.volatility5mPct : (coin.volatility24hPct * 0.12);
                       return (
-                        <span className={`font-bold font-mono text-xs ${
-                          vol >= 1.5 ? 'text-amber-400' : vol >= 0.6 ? 'text-emerald-400' : 'text-slate-400'
+                        <span className={`font-bold font-mono text-xs sm:text-sm block ${
+                          vol >= 1.5 ? 'text-amber-400' : vol >= 0.6 ? 'text-emerald-400' : 'text-slate-300'
                         }`}>
-                          {vol.toFixed(2)}%
+                          ⚡ {vol.toFixed(2)}%
                         </span>
                       );
                     })()}
