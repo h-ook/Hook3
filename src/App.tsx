@@ -27,6 +27,7 @@ import {
   saveStoredMetaScalpSettings,
   sendTickerToMetaScalp,
 } from './utils/metaScalpService';
+import { getCoinWatchlistKey, isCoinInWatchlist, normalizeWatchlist, CoinIdentifier } from './utils/watchlistUtils';
 import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType } from './types';
 import { runDirectClientScan, getFallbackScannedCoins } from './utils/directExchangeClient';
 import {
@@ -130,25 +131,49 @@ export default function App() {
 
   // Synchronize watchlist with current logged-in user profile & user-scoped storage
   useEffect(() => {
+    // Helper to check if stored watchlist is just the old hardcoded default 3 Binance coins
+    const isOldHardcodedDefault = (list: string[]) => {
+      if (list.length === 3) {
+        const norm = list.map((s) => s.toLowerCase());
+        const hasBtc = norm.some((s) => s.includes('binance') && s.includes('btcusdt'));
+        const hasEth = norm.some((s) => s.includes('binance') && s.includes('ethusdt'));
+        const hasSol = norm.some((s) => s.includes('binance') && s.includes('solusdt'));
+        if (hasBtc && hasEth && hasSol) return true;
+      }
+      return false;
+    };
+
     if (!user) {
       try {
         const guestSaved = localStorage.getItem('crypto_screener_watchlist_guest');
         if (guestSaved) {
           const parsed = JSON.parse(guestSaved);
           if (Array.isArray(parsed)) {
-            setWatchlist(Array.from(new Set(parsed)));
+            if (isOldHardcodedDefault(parsed)) {
+              setWatchlist([]);
+              try {
+                localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify([]));
+              } catch {}
+              return;
+            }
+            setWatchlist(normalizeWatchlist(parsed));
             return;
           }
         }
       } catch {}
-      setWatchlist(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
+      setWatchlist([]);
       return;
     }
 
     if (profile?.watchlist && Array.isArray(profile.watchlist)) {
-      setWatchlist(Array.from(new Set(profile.watchlist)));
+      if (isOldHardcodedDefault(profile.watchlist)) {
+        setWatchlist([]);
+        updateProfileData({ watchlist: [] }).catch(() => {});
+        return;
+      }
+      setWatchlist(normalizeWatchlist(profile.watchlist));
       try {
-        localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(profile.watchlist));
+        localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(normalizeWatchlist(profile.watchlist)));
       } catch {}
       return;
     }
@@ -159,7 +184,11 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setWatchlist(Array.from(new Set(parsed)));
+          if (isOldHardcodedDefault(parsed)) {
+            setWatchlist([]);
+            return;
+          }
+          setWatchlist(normalizeWatchlist(parsed));
           return;
         }
       }
@@ -248,6 +277,18 @@ export default function App() {
   // Authentication & Profile modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [profileModalTab, setProfileModalTab] = useState<'general' | 'exchange_api'>('general');
+
+  useEffect(() => {
+    const handleOpenProfileModal = (e: any) => {
+      if (e?.detail?.tab) {
+        setProfileModalTab(e.detail.tab);
+      }
+      setIsProfileModalOpen(true);
+    };
+    window.addEventListener('open_user_profile_modal', handleOpenProfileModal);
+    return () => window.removeEventListener('open_user_profile_modal', handleOpenProfileModal);
+  }, []);
 
   // Auto-dismiss Alert toast
   useEffect(() => {
@@ -496,14 +537,17 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchScreenerData]);
 
-  // Toggle watchlist (isolated per user profile or local guest storage)
-  const handleToggleWatchlist = (symbol: string) => {
+  // Toggle watchlist (isolated per user profile, exchange, and marketType)
+  const handleToggleWatchlist = (target: string | ScannedCoin | CoinIdentifier) => {
+    const targetKey = getCoinWatchlistKey(target);
+
     if (!user) {
       setWatchlist((prev) => {
-        const uniquePrev = Array.from(new Set(prev));
-        const next = uniquePrev.includes(symbol)
-          ? uniquePrev.filter((s) => s !== symbol)
-          : [...uniquePrev, symbol];
+        const uniquePrev = normalizeWatchlist(prev);
+        const exists = isCoinInWatchlist(uniquePrev, target);
+        const next = exists
+          ? uniquePrev.filter((k) => k !== targetKey && !isCoinInWatchlist([k], target))
+          : [...uniquePrev, targetKey];
         const cleanNext = Array.from(new Set(next));
         try {
           localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify(cleanNext));
@@ -513,10 +557,11 @@ export default function App() {
       return;
     }
     setWatchlist((prev) => {
-      const uniquePrev = Array.from(new Set(prev));
-      const next = uniquePrev.includes(symbol)
-        ? uniquePrev.filter((s) => s !== symbol)
-        : [...uniquePrev, symbol];
+      const uniquePrev = normalizeWatchlist(prev);
+      const exists = isCoinInWatchlist(uniquePrev, target);
+      const next = exists
+        ? uniquePrev.filter((k) => k !== targetKey && !isCoinInWatchlist([k], target))
+        : [...uniquePrev, targetKey];
       const cleanNext = Array.from(new Set(next));
       try {
         localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(cleanNext));
@@ -831,7 +876,7 @@ export default function App() {
                     key={`${coin.exchange}-${coin.symbol}-${coin.marketType}-${formation.id}-${idx}`}
                     coin={coin}
                     formation={formation}
-                    isWatchlisted={watchlist.includes(coin.symbol)}
+                    isWatchlisted={isCoinInWatchlist(watchlist, coin)}
                     onToggleWatchlist={handleToggleWatchlist}
                     onSelect={handleSelectPair}
                     onSendMetaScalp={handleSendToMetaScalp}
@@ -979,6 +1024,7 @@ export default function App() {
       {/* User Profile & Isolated Settings Modal */}
       <UserProfileModal
         isOpen={isProfileModalOpen}
+        initialTab={profileModalTab}
         onClose={() => setIsProfileModalOpen(false)}
         onOpenAlerts={() => handleOpenTelegramAlerts()}
         onOpenArchive={() => setIsArchiveModalOpen(true)}

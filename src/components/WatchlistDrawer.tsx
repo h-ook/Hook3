@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
-import { ScannedCoin } from '../types';
+import { ScannedCoin, ExchangeId, MarketType } from '../types';
 import { formatCryptoPrice } from '../utils/formatters';
+import { getCoinWatchlistKey, isCoinInWatchlist, normalizeWatchlist } from '../utils/watchlistUtils';
 
 interface WatchlistDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   watchlistSymbols: string[];
   allCoins: ScannedCoin[];
-  onRemove: (symbol: string) => void;
+  onRemove: (coinOrSymbol: string | ScannedCoin) => void;
   folders: Record<string, string[]>;
   onFoldersChange: (folders: Record<string, string[]>) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
@@ -33,27 +34,76 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const uniqueWatchlist = Array.from(new Set(watchlistSymbols));
-  const watchlistedCoins = allCoins.filter((c) => uniqueWatchlist.includes(c.symbol));
+  const uniqueWatchlist = useMemo(() => normalizeWatchlist(watchlistSymbols), [watchlistSymbols]);
+
+  // Build full coin list for favorites strictly matching the watchlist keys
+  const watchlistedCoins = useMemo(() => {
+    return uniqueWatchlist.map((key) => {
+      // Find matching coin in allCoins strictly by exchange, marketType, and symbol
+      const found = allCoins.find((c) => isCoinInWatchlist([key], c));
+      if (found) return found;
+
+      const parts = key.split(':');
+      let ex: ExchangeId = 'binance';
+      let mt: MarketType = 'futures';
+      let sym = key;
+      if (parts.length >= 3) {
+        ex = (parts[0].toLowerCase() === 'bybit' ? 'bybit' : 'binance') as ExchangeId;
+        mt = (parts[1].toLowerCase() === 'spot' ? 'spot' : 'futures') as MarketType;
+        sym = parts.slice(2).join(':');
+      } else if (parts.length === 2) {
+        ex = (parts[0].toLowerCase() === 'bybit' ? 'bybit' : 'binance') as ExchangeId;
+        sym = parts[1];
+      }
+      const clean = sym.toUpperCase();
+      const base = clean.replace(/(USDT|BUSD|USDC)$/, '') || clean;
+      const quote = clean.slice(base.length) || 'USDT';
+      return {
+        symbol: clean,
+        baseAsset: base,
+        quoteAsset: quote,
+        exchange: ex,
+        marketType: mt,
+        currentPrice: 0,
+        priceChange24h: 0,
+        volume24hUsd: 0,
+        formations: [],
+        timeframe: '1h',
+        lastUpdated: Date.now(),
+      } as unknown as ScannedCoin;
+    });
+  }, [allCoins, uniqueWatchlist]);
 
   const folderNames = Object.keys(folders);
-  const getFolderForSymbol = (symbol: string) => folderNames.find((folder) => folders[folder].includes(symbol)) || '';
-  const sortCoins = (coins: ScannedCoin[]) => [...coins].sort((a, b) => {
+  const getFolderForCoin = (coin: ScannedCoin) => {
+    const key = getCoinWatchlistKey(coin);
+    return folderNames.find((folder) => folders[folder]?.includes(key)) || '';
+  };
+
+  const sortCoins = (coinsList: ScannedCoin[]) => [...coinsList].sort((a, b) => {
     let result = 0;
     if (sortBy === 'name') result = a.baseAsset.localeCompare(b.baseAsset);
     if (sortBy === 'price') result = a.currentPrice - b.currentPrice;
     if (sortBy === 'change') result = a.priceChange24h - b.priceChange24h;
-    if (sortBy === 'volume') result = a.volume24hUsd - b.volume24hUsd;
+    if (sortBy === 'volume') result = (a.volume24hUsd || 0) - (b.volume24hUsd || 0);
     return sortDirection === 'asc' ? result : -result;
   });
+
   const groups = folderNames.map((folder) => ({
     name: folder,
-    coins: sortCoins(watchlistedCoins.filter((coin) => folders[folder].includes(coin.symbol))),
+    coins: sortCoins(watchlistedCoins.filter((coin) => {
+      const key = getCoinWatchlistKey(coin);
+      return folders[folder]?.includes(key);
+    })),
   }));
-  const assignedSymbols = new Set(Object.values(folders).flat());
+
+  const assignedKeys = new Set(Object.values(folders).flat());
   groups.push({
     name: '',
-    coins: sortCoins(watchlistedCoins.filter((coin) => !assignedSymbols.has(coin.symbol))),
+    coins: sortCoins(watchlistedCoins.filter((coin) => {
+      const key = getCoinWatchlistKey(coin);
+      return !assignedKeys.has(key);
+    })),
   });
 
   const createFolder = () => {
@@ -63,24 +113,25 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     setNewFolderName('');
   };
 
-  const moveCoin = (symbol: string, folder: string) => {
+  const moveCoin = (coin: ScannedCoin, folder: string) => {
+    const key = getCoinWatchlistKey(coin);
     const next: Record<string, string[]> = {};
 
     Object.entries(folders).forEach(([name, symbols]) => {
       const safeSymbols = Array.isArray(symbols) ? symbols : [];
-      next[name] = safeSymbols.filter((item) => item !== symbol);
+      next[name] = safeSymbols.filter((item) => item !== key);
     });
 
     if (folder) {
-      next[folder] = [...(next[folder] || []), symbol];
+      next[folder] = [...(next[folder] || []), key];
     }
 
     onFoldersChange(next);
   };
 
-  const removeCoin = (symbol: string) => {
-    onRemove(symbol);
-    moveCoin(symbol, '');
+  const removeCoin = (coin: ScannedCoin) => {
+    onRemove(coin);
+    moveCoin(coin, '');
   };
 
   const formatPrice = (price: number) => formatCryptoPrice(price);
@@ -199,8 +250,8 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                       </button>
                     )}
                     <select
-                      value={getFolderForSymbol(coin.symbol)}
-                      onChange={(event) => moveCoin(coin.symbol, event.target.value)}
+                      value={getFolderForCoin(coin)}
+                      onChange={(event) => moveCoin(coin, event.target.value)}
                       className="max-w-[90px] bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-slate-400 outline-none"
                       title="Перемістити в папку"
                     >
@@ -208,7 +259,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                       {folderNames.map((folder) => <option key={folder} value={folder}>{folder}</option>)}
                     </select>
                     <button
-                      onClick={() => removeCoin(coin.symbol)}
+                      onClick={() => removeCoin(coin)}
                       title="Видалити з обраного"
                       className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition-colors"
                     >

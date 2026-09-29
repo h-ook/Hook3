@@ -24,6 +24,12 @@ import { Kline, DetectedFormation, Timeframe, ExchangeId, MarketType, ChartMarke
 import { TradingViewChart } from './TradingViewChart';
 import { formatCryptoPrice } from '../utils/formatters';
 import { fetchDirectKlines } from '../utils/directExchangeClient';
+import {
+  getCoinWatchlistKey,
+  isCoinInWatchlist,
+  normalizeWatchlist,
+  CoinIdentifier,
+} from '../utils/watchlistUtils';
 
 interface FullscreenChartModalProps {
   isOpen: boolean;
@@ -53,7 +59,7 @@ interface FullscreenChartModalProps {
   savedChartParams?: ChartRestoreParams;
   allCoins?: ScannedCoin[];
   watchlist?: string[];
-  onToggleWatchlist?: (symbol: string) => void;
+  onToggleWatchlist?: (coinOrSymbol: string | ScannedCoin | CoinIdentifier) => void;
 }
 
 export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
@@ -82,7 +88,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   const [localWatchlist, setLocalWatchlist] = useState<string[]>(() => {
     try {
       const initial = watchlist && watchlist.length > 0 ? watchlist : JSON.parse(localStorage.getItem('crypto_screener_watchlist') || '[]');
-      return Array.isArray(initial) ? Array.from(new Set(initial)) : [];
+      return Array.isArray(initial) ? normalizeWatchlist(initial) : [];
     } catch {
       return [];
     }
@@ -91,7 +97,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   // Sync localWatchlist with prop if parent updates
   useEffect(() => {
     if (watchlist && watchlist.length > 0) {
-      setLocalWatchlist(Array.from(new Set(watchlist)));
+      setLocalWatchlist(normalizeWatchlist(watchlist));
     }
   }, [watchlist]);
 
@@ -170,31 +176,38 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   }, []);
 
   // Remove symbol from favorites
-  const handleRemoveFromWatchlist = (sym: string, e: React.MouseEvent) => {
+  const handleRemoveFromWatchlist = (coinOrKey: ScannedCoin | string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const targetKey = getCoinWatchlistKey(coinOrKey);
     setLocalWatchlist((prev) => {
-      const next = prev.filter((s) => s !== sym);
+      const next = prev.filter((s) => s !== targetKey && !isCoinInWatchlist([s], coinOrKey));
       try {
         localStorage.setItem('crypto_screener_watchlist', JSON.stringify(next));
       } catch {}
       return next;
     });
-    onToggleWatchlist?.(sym);
+    onToggleWatchlist?.(coinOrKey);
   };
 
   // Build full coin list for favorites
   const favoriteCoins = useMemo(() => {
-    const uniqueSymbols: string[] = Array.from(new Set<string>(localWatchlist));
-    const coinsMap = new Map<string, ScannedCoin>();
-    allCoins.forEach((c) => {
-      if (!coinsMap.has(c.symbol)) {
-        coinsMap.set(c.symbol, c);
-      }
-    });
+    const uniqueKeys: string[] = normalizeWatchlist(localWatchlist);
 
-    return uniqueSymbols.map((sym: string) => {
-      const found = coinsMap.get(sym);
+    return uniqueKeys.map((key: string) => {
+      const found = allCoins.find((c) => isCoinInWatchlist([key], c));
       if (found) return found;
+      const parts = key.split(':');
+      let ex = 'binance' as ExchangeId;
+      let mt = 'futures' as MarketType;
+      let sym = key;
+      if (parts.length >= 3) {
+        ex = parts[0] as ExchangeId;
+        mt = parts[1] as MarketType;
+        sym = parts.slice(2).join(':');
+      } else if (parts.length === 2) {
+        ex = parts[0] as ExchangeId;
+        sym = parts[1];
+      }
       const clean = sym.toUpperCase();
       const base = clean.replace(/(USDT|BUSD|USDC)$/, '') || clean;
       const quote = clean.slice(base.length) || 'USDT';
@@ -202,8 +215,8 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
         symbol: clean,
         baseAsset: base,
         quoteAsset: quote,
-        exchange: 'binance' as ExchangeId,
-        marketType: 'futures' as MarketType,
+        exchange: ex,
+        marketType: mt,
         currentPrice: 0,
         priceChange24h: 0,
         formations: [],
@@ -670,7 +683,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
                       </div>
 
                       <button
-                        onClick={(e) => handleRemoveFromWatchlist(favCoin.symbol, e)}
+                        onClick={(e) => handleRemoveFromWatchlist(favCoin, e)}
                         className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                         title="Видалити з обраного"
                       >

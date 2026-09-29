@@ -23,7 +23,7 @@ interface FormationCardProps {
   coin: ScannedCoin;
   formation: DetectedFormation;
   isWatchlisted: boolean;
-  onToggleWatchlist: (symbol: string) => void;
+  onToggleWatchlist: (coinOrSymbol: string | ScannedCoin) => void;
   onSelect: (coin: ScannedCoin, formation: DetectedFormation) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
@@ -227,7 +227,7 @@ export const FormationCard: React.FC<FormationCardProps> = ({
                   {formation.name}
                 </span>
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
+                  className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider whitespace-nowrap ${
                     isBullish
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                       : isBearish
@@ -377,7 +377,7 @@ export const FormationCard: React.FC<FormationCardProps> = ({
               </button>
 
               <button
-                onClick={() => onToggleWatchlist(coin.symbol)}
+                onClick={() => onToggleWatchlist(coin)}
                 title={isWatchlisted ? 'Видалити з обраного' : 'Додати в обране'}
                 className={`p-2 rounded-xl border transition-colors cursor-pointer ${
                   isWatchlisted

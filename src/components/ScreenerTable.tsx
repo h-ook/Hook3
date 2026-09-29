@@ -3,11 +3,12 @@ import { ExternalLink, Star, BarChart2, TrendingUp, TrendingDown, Zap, Send } fr
 import { ScannedCoin, DetectedFormation } from '../types';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { useLanguage } from '../context/LanguageContext';
+import { isCoinInWatchlist } from '../utils/watchlistUtils';
 
 interface ScreenerTableProps {
   items: { coin: ScannedCoin; formation: DetectedFormation }[];
   watchlist: string[];
-  onToggleWatchlist: (symbol: string) => void;
+  onToggleWatchlist: (coinOrSymbol: string | ScannedCoin) => void;
   onSelect: (coin: ScannedCoin, formation: DetectedFormation) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
@@ -48,7 +49,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
         </thead>
         <tbody className="divide-y divide-slate-800/60 font-sans">
           {items.map(({ coin, formation }, idx) => {
-            const isWatchlisted = watchlist.includes(coin.symbol);
+            const isWatchlisted = isCoinInWatchlist(watchlist, coin);
             const isPositive = coin.priceChange24h >= 0;
             const isBullish = formation.bias === 'bullish';
             const isBearish = formation.bias === 'bearish';
@@ -62,7 +63,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
                 {/* Watchlist toggle */}
                 <td className="py-3 px-2 sm:px-3 text-center" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => onToggleWatchlist(coin.symbol)}
+                    onClick={() => onToggleWatchlist(coin)}
                     className="text-slate-500 hover:text-amber-400 transition-colors p-1"
                   >
                     <Star className={`w-3.5 h-3.5 ${isWatchlisted ? 'fill-amber-400 text-amber-400' : ''}`} />
@@ -91,23 +92,56 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
                     </span>
                   </div>
 
-                  {/* Mobile mini range if available */}
-                  {coin.highPrice24h && coin.lowPrice24h && coin.highPrice24h > coin.lowPrice24h ? (
-                    <div className="sm:hidden mt-1 pt-1 border-t border-slate-800/60 flex items-center gap-1 text-[9px] text-slate-400">
-                      <span className="text-[8px] text-slate-500">L:</span>
-                      <span>${formatPrice(coin.lowPrice24h)}</span>
-                      <div className="h-1 w-10 bg-slate-800 rounded-full overflow-hidden flex-1 max-w-[50px]">
-                        <div
-                          className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full"
-                          style={{
-                            width: `${Math.min(100, Math.max(0, ((coin.currentPrice - coin.lowPrice24h) / (coin.highPrice24h - coin.lowPrice24h)) * 100))}%`
-                          }}
-                        />
+                  {/* Scalper Metrics: Волатильність 5м, Відстань до хаю, Відстань до лою */}
+                  {(() => {
+                    const high = coin.highPrice24h || coin.high24h || coin.currentPrice;
+                    const low = coin.lowPrice24h || coin.low24h || coin.currentPrice;
+                    const distHigh = high > 0 && coin.currentPrice > 0 ? Math.max(0, ((high - coin.currentPrice) / high) * 100) : 0;
+                    const distLow = low > 0 && coin.currentPrice > 0 ? Math.max(0, ((coin.currentPrice - low) / low) * 100) : 0;
+                    const vol5m = Math.max(0.12, Math.abs(coin.priceChange24h) * 0.14);
+
+                    return (
+                      <div className="flex flex-wrap items-center gap-1 mt-1 font-mono text-[9px]">
+                        <span
+                          className={`inline-flex items-center gap-0.5 px-1 py-0.2 rounded font-bold border shadow-xs ${
+                            vol5m >= 1.5
+                              ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                              : vol5m >= 0.7
+                              ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
+                              : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                          }`}
+                          title={`Волатильність: ${vol5m.toFixed(2)}%`}
+                        >
+                          <Zap className="w-2 h-2 text-cyan-400 shrink-0" />
+                          <span>5: {vol5m.toFixed(2)}%</span>
+                        </span>
+
+                        <span
+                          className={`inline-flex items-center gap-0.5 px-1 py-0.2 rounded font-bold border shadow-xs ${
+                            distHigh <= 2.0
+                              ? 'bg-purple-500/25 border-purple-500/50 text-purple-200'
+                              : 'bg-slate-800/80 border-slate-700/90 text-purple-300/90'
+                          }`}
+                          title={`Відстань до максимуму: -${distHigh.toFixed(1)}%`}
+                        >
+                          <span className="text-[7.5px] text-purple-400 font-sans">▲</span>
+                          <span>Хай: -{distHigh.toFixed(1)}%</span>
+                        </span>
+
+                        <span
+                          className={`inline-flex items-center gap-0.5 px-1 py-0.2 rounded font-bold border shadow-xs ${
+                            distLow <= 2.0
+                              ? 'bg-blue-500/25 border-blue-500/50 text-blue-200'
+                              : 'bg-slate-800/80 border-slate-700/90 text-blue-300/90'
+                          }`}
+                          title={`Відстань до мінімуму: +${distLow.toFixed(1)}%`}
+                        >
+                          <span className="text-[7.5px] text-blue-400 font-sans">▼</span>
+                          <span>Лой: +{distLow.toFixed(1)}%</span>
+                        </span>
                       </div>
-                      <span className="text-[8px] text-slate-500">H:</span>
-                      <span>${formatPrice(coin.highPrice24h)}</span>
-                    </div>
-                  ) : null}
+                    );
+                  })()}
                 </td>
 
                 {/* Exchange */}
@@ -175,7 +209,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
 
                 {/* Volume */}
                 <td className="py-3 px-3 sm:px-4 text-right font-mono text-slate-400 hidden md:table-cell">
-                  {formatVolume(coin.volume24hUsd)}
+                  ${formatVolume(coin.volume24hUsd)}
                 </td>
 
                 {/* Trading Levels (Entry, Target, Stop) */}

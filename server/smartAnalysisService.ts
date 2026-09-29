@@ -114,22 +114,36 @@ function calculatePOC(klines: Kline[], currentPrice: number): { pocPrice: number
 // Analyze Multi-Timeframe BTC Structure
 async function analyzeBTCStructure(): Promise<SmartAnalysisData['btcContext']> {
   try {
+    const fetchWithMirrors = async (path: string) => {
+      const mirrors = [
+        `https://fapi.binance.com${path}`,
+        `https://data-api.binance.vision${path.replace('/fapi/v1', '/api/v3')}`,
+        `https://api.binance.com${path.replace('/fapi/v1', '/api/v3')}`,
+      ];
+      for (const url of mirrors) {
+        try {
+          const res = await fetch(url, {
+            headers: { 'User-Agent': 'CryptoPatternScreener/1.0' },
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) return data;
+            if (!Array.isArray(data) && data && Object.keys(data).length > 0) return data;
+          }
+        } catch {}
+      }
+      return [];
+    };
+
     const [res15m, res5m, res1m, resTicker] = await Promise.all([
-      fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=25', {
-        headers: { 'User-Agent': 'CryptoPatternScreener/1.0' },
-      }).then((r) => (r.ok ? r.json() : [])),
-      fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=25', {
-        headers: { 'User-Agent': 'CryptoPatternScreener/1.0' },
-      }).then((r) => (r.ok ? r.json() : [])),
-      fetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=25', {
-        headers: { 'User-Agent': 'CryptoPatternScreener/1.0' },
-      }).then((r) => (r.ok ? r.json() : [])),
-      fetch('https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT', {
-        headers: { 'User-Agent': 'CryptoPatternScreener/1.0' },
-      }).then((r) => (r.ok ? r.json() : ({} as any))),
+      fetchWithMirrors('/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=25'),
+      fetchWithMirrors('/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=25'),
+      fetchWithMirrors('/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=25'),
+      fetchWithMirrors('/fapi/v1/ticker/24hr?symbol=BTCUSDT'),
     ]);
 
-    const tickerObj = resTicker as { lastPrice?: string; priceChangePercent?: string };
+    const tickerObj = (Array.isArray(resTicker) ? resTicker[0] : resTicker) || {} as any;
     const btcPrice = parseFloat(tickerObj?.lastPrice || '') || 85000;
     const change24h = parseFloat(tickerObj?.priceChangePercent || '') || 1.2;
 

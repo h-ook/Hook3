@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { runScreenerScan, fetchKlines, fetchMarketCoins, fetchOrderBook, fetchRecentTrades } from './server/marketService';
+import { runScreenerScan, fetchKlines, fetchMarketCoins, fetchOrderBook, fetchRecentTrades, fetchDualExchangeOI } from './server/marketService';
 import { analyzeFormationWithAI } from './server/geminiService';
 import { generateSmartAnalysis } from './server/smartAnalysisService';
 import { calculateMarketSentiment } from './server/sentimentService';
@@ -39,6 +39,13 @@ import {
 } from './server/surveillanceService';
 import { ExchangeId, MarketType, Timeframe } from './src/types';
 import { cronManager } from './server/cronService';
+import {
+  testExchangeCredentials,
+  placeExchangeOrder,
+  fetchOpenOrders,
+  cancelExchangeOrder,
+  cancelAllExchangeOrders,
+} from './server/exchangeTradingService';
 
 async function startServer() {
   const app = express();
@@ -280,6 +287,21 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error fetching trades:', err);
       res.status(500).json({ success: false, error: err.message || 'Failed to fetch trades' });
+    }
+  });
+
+  // Dual Exchange Open Interest (Binance & Bybit)
+  app.get('/api/derivatives/oi', async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || 'BTCUSDT';
+      const baseAsset = (req.query.baseAsset as string) || undefined;
+      const price = req.query.price ? parseFloat(req.query.price as string) : undefined;
+
+      const oi = await fetchDualExchangeOI(symbol, baseAsset, price);
+      res.json({ success: true, ...oi });
+    } catch (err: any) {
+      console.error('Error in /api/derivatives/oi:', err);
+      res.status(500).json({ success: false, error: err.message || 'Failed to fetch OI' });
     }
   });
 
@@ -704,6 +726,72 @@ async function startServer() {
       res.json({ success: true, coin: updated });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ================= EXCHANGE API & REAL ORDER TRADING =================
+  app.post('/api/exchange/test-keys', async (req, res) => {
+    try {
+      const { credentials } = req.body;
+      if (!credentials) {
+        return res.status(400).json({ success: false, message: 'Параметри облікових даних відсутні' });
+      }
+      const result = await testExchangeCredentials(credentials);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || 'Внутрішня помилка перевірки ключів' });
+    }
+  });
+
+  app.post('/api/exchange/order', async (req, res) => {
+    try {
+      const { credentials, order } = req.body;
+      if (!credentials || !order) {
+        return res.status(400).json({ success: false, message: 'Дані API або параметри ордера відсутні' });
+      }
+      const result = await placeExchangeOrder(credentials, order);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || 'Помилка виконання ордера' });
+    }
+  });
+
+  app.post('/api/exchange/open-orders', async (req, res) => {
+    try {
+      const { credentials, symbol } = req.body;
+      if (!credentials) {
+        return res.status(400).json({ success: false, orders: [], message: 'Облікові дані API не надано' });
+      }
+      const result = await fetchOpenOrders(credentials, symbol);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, orders: [], message: err?.message || 'Помилка отримання відкритих ордерів' });
+    }
+  });
+
+  app.post('/api/exchange/cancel-order', async (req, res) => {
+    try {
+      const { credentials, symbol, orderId } = req.body;
+      if (!credentials || !symbol || !orderId) {
+        return res.status(400).json({ success: false, message: 'Необхідно вказати symbol та orderId' });
+      }
+      const result = await cancelExchangeOrder(credentials, symbol, orderId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || 'Помилка скасування ордера' });
+    }
+  });
+
+  app.post('/api/exchange/cancel-all', async (req, res) => {
+    try {
+      const { credentials, symbol } = req.body;
+      if (!credentials || !symbol) {
+        return res.status(400).json({ success: false, message: 'Необхідно вказати symbol' });
+      }
+      const result = await cancelAllExchangeOrders(credentials, symbol);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || 'Помилка скасування ордерів' });
     }
   });
 

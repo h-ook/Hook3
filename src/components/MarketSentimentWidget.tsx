@@ -145,7 +145,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
 
               <div>
                 <span className="text-base sm:text-lg font-bold text-white block">
-                  {formatVolume(data.tradingVolume.total24hUsd)}
+                  ${formatVolume(data.tradingVolume.total24hUsd)}
                 </span>
                 <span className="text-[10px] text-emerald-400 font-sans block">
                   Темп: {data.tradingVolume.volumeVelocity === 'high' ? 'Високий актив' : 'Стабільний'}
@@ -216,7 +216,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
 
               <div>
                 <span className="text-base sm:text-lg font-bold text-cyan-300 block">
-                  {formatVolume(data.derivativesOverview.aggregatedOIUsd)}
+                  ${formatVolume(data.derivativesOverview.aggregatedOIUsd)}
                 </span>
                 <span className="text-[10px] text-slate-400 font-sans block truncate">
                   Фандинг: {data.derivativesOverview.avgFundingRate}%

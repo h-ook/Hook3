@@ -33,11 +33,16 @@ import { AddChartModal } from './terminal/AddChartModal';
 import { TerminalSettingsDrawer } from './terminal/TerminalSettingsDrawer';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
+import {
+  getCoinWatchlistKey,
+  isCoinInWatchlist,
+  normalizeWatchlist,
+} from '../utils/watchlistUtils';
 
 interface TerminalPageProps {
   coins: ScannedCoin[];
   watchlist: string[];
-  onToggleWatchlist: (symbol: string) => void;
+  onToggleWatchlist: (coinOrSymbol: string | ScannedCoin) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
   onOpenTelegramAlerts?: (prefill?: any) => void;
@@ -165,10 +170,12 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
   // Modal / Drawer state for multi-chart mode
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addModalInitialMode, setAddModalInitialMode] = useState<TerminalBlockMode>('tradingview');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [maximizedBlockId, setMaximizedBlockId] = useState<string | null>(null);
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
+  const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
 
   // Watchlist synchronization
   const [localWatchlist, setLocalWatchlist] = useState<string[]>(() => {
@@ -245,17 +252,24 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
   // Watchlist favorites items
   const favoriteCoins = useMemo(() => {
-    const uniqueSymbols: string[] = Array.from(new Set<string>(localWatchlist));
-    const coinsMap = new Map<string, ScannedCoin>();
-    coins.forEach((c) => {
-      if (!coinsMap.has(c.symbol)) {
-        coinsMap.set(c.symbol, c);
-      }
-    });
+    const uniqueKeys: string[] = normalizeWatchlist(localWatchlist);
 
-    return uniqueSymbols.map((sym: string) => {
-      const found = coinsMap.get(sym);
+    return uniqueKeys.map((key: string) => {
+      const found = coins.find((c) => isCoinInWatchlist([key], c));
       if (found) return found;
+
+      const parts = key.split(':');
+      let ex = 'binance' as ExchangeId;
+      let mt = 'futures' as MarketType;
+      let sym = key;
+      if (parts.length >= 3) {
+        ex = (parts[0].toLowerCase() === 'bybit' ? 'bybit' : 'binance') as ExchangeId;
+        mt = (parts[1].toLowerCase() === 'spot' ? 'spot' : 'futures') as MarketType;
+        sym = parts.slice(2).join(':');
+      } else if (parts.length === 2) {
+        ex = (parts[0].toLowerCase() === 'bybit' ? 'bybit' : 'binance') as ExchangeId;
+        sym = parts[1];
+      }
       const clean = sym.toUpperCase();
       const base = clean.replace(/(USDT|BUSD|USDC)$/, '') || clean;
       const quote = clean.slice(base.length) || 'USDT';
@@ -263,8 +277,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         symbol: clean,
         baseAsset: base,
         quoteAsset: quote,
-        exchange: 'binance' as ExchangeId,
-        marketType: 'futures' as MarketType,
+        exchange: ex,
+        marketType: mt,
         currentPrice: 0,
         priceChange24h: 0,
         formations: [],
@@ -282,16 +296,17 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     );
   }, [favoriteCoins, searchQuery]);
 
-  const handleRemoveFromWatchlist = (sym: string, e: React.MouseEvent) => {
+  const handleRemoveFromWatchlist = (coinOrKey: ScannedCoin | string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const targetKey = getCoinWatchlistKey(coinOrKey);
     setLocalWatchlist((prev) => {
-      const next = prev.filter((s) => s !== sym);
+      const next = prev.filter((s) => s !== targetKey && !isCoinInWatchlist([s], coinOrKey));
       try {
         localStorage.setItem('crypto_screener_watchlist', JSON.stringify(next));
       } catch {}
       return next;
     });
-    onToggleWatchlist?.(sym);
+    onToggleWatchlist?.(coinOrKey);
   };
 
   const handleSelectFavoriteCoin = (favCoin: ScannedCoin) => {
@@ -404,6 +419,56 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     });
   };
 
+  // Combine / Merge two blocks (e.g. orderbook block dragged onto chart block)
+  const handleMergeBlocks = (sourceIndex: number, targetIndex: number) => {
+    setBlocks((prev) => {
+      if (sourceIndex < 0 || sourceIndex >= prev.length || targetIndex < 0 || targetIndex >= prev.length) {
+        return prev;
+      }
+      const updated = [...prev];
+      const source = updated[sourceIndex];
+      const target = updated[targetIndex];
+
+      // Build combined block adapting colSpan to screen
+      const mergedBlock: TerminalChartBlock = {
+        ...target,
+        mode: 'combined',
+        colSpan: config.columns > 1 ? 2 : 1,
+        domSettings: source.domSettings || target.domSettings,
+      };
+
+      updated[targetIndex] = mergedBlock;
+      updated.splice(sourceIndex, 1);
+      return updated;
+    });
+    setDraggedBlockIndex(null);
+    setDragOverBlockIndex(null);
+  };
+
+  // Split a combined block back into 2 separate blocks (1 chart + 1 orderbook)
+  const handleSplitBlock = (blockId: string) => {
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b.id === blockId);
+      if (idx === -1) return prev;
+      const target = prev[idx];
+      const chartBlock: TerminalChartBlock = {
+        ...target,
+        id: `block-${target.symbol}-chart-${Date.now()}`,
+        mode: 'tradingview',
+        colSpan: 1,
+      };
+      const domBlock: TerminalChartBlock = {
+        ...target,
+        id: `block-${target.symbol}-dom-${Date.now() + 1}`,
+        mode: 'orderbook',
+        colSpan: 1,
+      };
+      const updated = [...prev];
+      updated.splice(idx, 1, chartBlock, domBlock);
+      return updated;
+    });
+  };
+
   const handleDragStart = (index: number) => {
     setDraggedBlockIndex(index);
   };
@@ -413,7 +478,35 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   };
 
   const handleDrop = (targetIndex: number) => {
-    if (draggedBlockIndex === null || draggedBlockIndex === targetIndex) return;
+    if (draggedBlockIndex === null || draggedBlockIndex === targetIndex) {
+      setDraggedBlockIndex(null);
+      setDragOverBlockIndex(null);
+      return;
+    }
+
+    const sourceBlock = blocks[draggedBlockIndex];
+    const targetBlock = blocks[targetIndex];
+
+    if (!sourceBlock || !targetBlock) {
+      setDraggedBlockIndex(null);
+      setDragOverBlockIndex(null);
+      return;
+    }
+
+    // Merge when an orderbook block is dropped on a chart or vice versa,
+    // or when either block is an orderbook block:
+    const canCombine =
+      (sourceBlock.mode === 'orderbook' && targetBlock.mode === 'tradingview') ||
+      (sourceBlock.mode === 'tradingview' && targetBlock.mode === 'orderbook') ||
+      sourceBlock.mode === 'orderbook' ||
+      targetBlock.mode === 'orderbook';
+
+    if (canCombine) {
+      handleMergeBlocks(draggedBlockIndex, targetIndex);
+      return;
+    }
+
+    // Reorder blocks
     setBlocks((prev) => {
       const updated = [...prev];
       const [movedItem] = updated.splice(draggedBlockIndex, 1);
@@ -421,6 +514,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       return updated;
     });
     setDraggedBlockIndex(null);
+    setDragOverBlockIndex(null);
   };
 
   const handleApplyGlobalTimeframe = (tf: Timeframe) => {
@@ -730,12 +824,28 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Add Chart Button */}
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setAddModalInitialMode('tradingview');
+              setIsAddModalOpen(true);
+            }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-cyan-900/30 transition-all active:scale-95 cursor-pointer"
             title="Додати новий блок з графіком монети"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Додати графік</span>
+            <span className="hidden sm:inline">Графік</span>
+          </button>
+
+          {/* Add Order Book (Стакан) Button */}
+          <button
+            onClick={() => {
+              setAddModalInitialMode('orderbook');
+              setIsAddModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-md shadow-emerald-900/30 transition-all active:scale-95 cursor-pointer"
+            title="Додати окремий блок біржового стакану (Scalper DOM / Лента)"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Стакан</span>
           </button>
 
           {/* Telegram Alert shortcut */}
@@ -808,7 +918,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         <div className="h-8 sm:h-9 bg-slate-950/80 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between gap-2 text-[11px] font-mono shrink-0 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-3 sm:gap-6 shrink-0">
             <span className="flex items-center gap-1 text-slate-300">
-              Об'єм 24г: <strong className="text-white">${formatVolume(activeCoin.volume24hUsd || 0)}</strong>
+              Об'єм 24г: <strong className="text-white">{formatVolume(activeCoin.volume24hUsd || 0)}</strong>
             </span>
             {activeCoin.highPrice24h ? (
               <span className="flex items-center gap-1 text-emerald-400">
@@ -887,7 +997,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               </div>
             ) : (
               filteredFavorites.map((favCoin, idx) => {
-                const isSelected = favCoin.symbol === activeCoin.symbol;
+                const isSelected = favCoin.symbol === activeCoin.symbol && favCoin.exchange === activeCoin.exchange;
                 const isFavPositive = (favCoin.priceChange24h || 0) >= 0;
                 return (
                   <div
@@ -939,7 +1049,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       </div>
 
                       <button
-                        onClick={(e) => handleRemoveFromWatchlist(favCoin.symbol, e)}
+                        onClick={(e) => handleRemoveFromWatchlist(favCoin, e)}
                         className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                         title="Видалити з обраного"
                       >
@@ -1023,8 +1133,31 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                     onOpenTelegramAlerts={onOpenTelegramAlerts}
                     onMove={(dir) => handleMoveBlock(index, dir)}
                     onDragStart={() => handleDragStart(index)}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(index)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (draggedBlockIndex !== null && draggedBlockIndex !== index) {
+                        setDragOverBlockIndex(index);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverBlockIndex === index) {
+                        setDragOverBlockIndex(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDrop(index);
+                    }}
+                    isDragOverMerge={dragOverBlockIndex === index && draggedBlockIndex !== null && draggedBlockIndex !== index}
+                    canMerge={
+                      draggedBlockIndex !== null &&
+                      draggedBlockIndex !== index &&
+                      ((blocks[draggedBlockIndex]?.mode === 'orderbook' && block.mode === 'tradingview') ||
+                        (blocks[draggedBlockIndex]?.mode === 'tradingview' && block.mode === 'orderbook') ||
+                        blocks[draggedBlockIndex]?.mode === 'orderbook' ||
+                        block.mode === 'orderbook')
+                    }
+                    onSplitBlock={() => handleSplitBlock(block.id)}
                     heightStyle={computedHeightStyle}
                   />
                 );
@@ -1034,12 +1167,13 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         )}
       </main>
 
-      {/* Add Chart Modal */}
+      {/* Add Chart / Order Book Modal */}
       <AddChartModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         coins={coins}
         watchlist={localWatchlist}
+        initialMode={addModalInitialMode}
         onAddChart={handleAddChart}
       />
 

@@ -14,15 +14,17 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
-import { ScannedCoin, DetectedFormation, Timeframe, ExchangeId, MarketType } from '../../types';
+import { ScannedCoin, DetectedFormation, Timeframe, ExchangeId, MarketType, TerminalBlockMode } from '../../types';
 import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
+import { isCoinInWatchlist } from '../../utils/watchlistUtils';
 
 interface AddChartModalProps {
   isOpen: boolean;
   onClose: () => void;
   coins: ScannedCoin[];
   watchlist: string[];
-  onAddChart: (coin: ScannedCoin, timeframe: Timeframe, mode: 'tradingview' | 'pattern' | 'orderbook', formationId?: string) => void;
+  initialMode?: TerminalBlockMode;
+  onAddChart: (coin: ScannedCoin, timeframe: Timeframe, mode: TerminalBlockMode, formationId?: string) => void;
 }
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({
@@ -30,6 +32,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   onClose,
   coins,
   watchlist,
+  initialMode = 'tradingview',
   onAddChart,
 }) => {
   const [search, setSearch] = useState('');
@@ -38,7 +41,17 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   const [selectedMarket, setSelectedMarket] = useState<'all' | MarketType>('all');
   const [selectedMinVolume, setSelectedMinVolume] = useState<number>(0);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('15m');
-  const [selectedMode, setSelectedMode] = useState<'tradingview' | 'pattern' | 'orderbook'>('tradingview');
+  const [selectedMode, setSelectedMode] = useState<TerminalBlockMode>(initialMode);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedMode(initialMode);
+    }
+  }, [isOpen, initialMode]);
+
+  const watchlistedCount = useMemo(() => {
+    return coins.filter((c) => isCoinInWatchlist(watchlist, c)).length;
+  }, [coins, watchlist]);
 
   const filteredCoins = useMemo(() => {
     let result = coins;
@@ -58,7 +71,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     if (filterTab === 'formations') {
       result = result.filter((c) => c.formations && c.formations.length > 0);
     } else if (filterTab === 'watchlist') {
-      result = result.filter((c) => watchlist.includes(c.symbol));
+      result = result.filter((c) => isCoinInWatchlist(watchlist, c));
     } else if (filterTab === 'gainers') {
       result = [...result].sort((a, b) => b.priceChange24h - a.priceChange24h);
     } else if (filterTab === 'volume') {
@@ -97,7 +110,11 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                Додати графік у термінал
+                {selectedMode === 'orderbook'
+                  ? 'Додати біржовий стакан у термінал'
+                  : selectedMode === 'combined'
+                  ? 'Додати Графік + Стакан у термінал'
+                  : 'Додати графік у термінал'}
               </h3>
               <p className="text-xs text-slate-400">
                 Виберіть монету зі списку або скористайтеся швидким пошуком
@@ -152,7 +169,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
               }`}
             >
               <Star className="w-3 h-3 text-amber-400" />
-              Обрані ({watchlist.length})
+              Обрані ({watchlistedCount})
             </button>
 
             <button
@@ -241,14 +258,55 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/60 text-xs">
+            {/* Block Type Mode Selector */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400 text-[11px] font-semibold">Тип блоку:</span>
+              <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMode('tradingview')}
+                  className={`px-2 py-0.5 rounded transition-all cursor-pointer font-medium ${
+                    selectedMode === 'tradingview'
+                      ? 'bg-cyan-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  📈 Графік
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMode('orderbook')}
+                  className={`px-2 py-0.5 rounded transition-all cursor-pointer font-medium ${
+                    selectedMode === 'orderbook'
+                      ? 'bg-emerald-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  📑 Стакан (DOM)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMode('combined')}
+                  className={`px-2 py-0.5 rounded transition-all cursor-pointer font-medium ${
+                    selectedMode === 'combined'
+                      ? 'bg-gradient-to-r from-cyan-600 to-emerald-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ⚡ Графік + Стакан
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <span className="text-slate-400 text-[11px]">Таймфрейм:</span>
               <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 font-mono text-[11px]">
                 {(['1m', '5m', '15m', '1h', '4h', '1d'] as Timeframe[]).map((tf) => (
                   <button
                     key={tf}
+                    type="button"
                     onClick={() => setSelectedTimeframe(tf)}
-                    className={`px-2 py-0.5 rounded transition-colors ${
+                    className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
                       selectedTimeframe === tf
                         ? 'bg-cyan-600 text-white font-bold'
                         : 'text-slate-400 hover:text-slate-200'
