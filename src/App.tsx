@@ -9,10 +9,10 @@ import { SurveillancePage } from './components/SurveillancePage';
 import { FormationDetailsModal } from './components/FormationDetailsModal';
 import { FormationGuideModal } from './components/FormationGuideModal';
 import { WatchlistDrawer } from './components/WatchlistDrawer';
-import { MetaScalpModal } from './components/MetaScalpModal';
+import { UnifiedLinkingModal } from './components/UnifiedLinkingModal';
 import { MetaScalpToast, MetaScalpToastState } from './components/MetaScalpToast';
 import { TelegramAlertsModal } from './components/TelegramAlertsModal';
-import { AuthModal } from './components/AuthModal';
+import { AuthModal, AuthPromptReason } from './components/AuthModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
@@ -25,10 +25,14 @@ import {
   MetaScalpSettings,
   getStoredMetaScalpSettings,
   saveStoredMetaScalpSettings,
-  sendTickerToMetaScalp,
 } from './utils/metaScalpService';
-import { getCoinWatchlistKey, isCoinInWatchlist, normalizeWatchlist, CoinIdentifier } from './utils/watchlistUtils';
-import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType } from './types';
+import {
+  DEFAULT_UNIFIED_LINKING_SETTINGS,
+  getStoredUnifiedLinkingSettings,
+  saveStoredUnifiedLinkingSettings,
+  sendTickerToUnifiedTerminals,
+} from './utils/terminalLinkingService';
+import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, UnifiedLinkingSettings } from './types';
 import { runDirectClientScan, getFallbackScannedCoins } from './utils/directExchangeClient';
 import {
   AlertCircle,
@@ -87,93 +91,79 @@ export default function App() {
     }));
   }, [preferences.defaultExchange, preferences.defaultMarketType, preferences.defaultTimeframe]);
 
-  // Active Category: 'patterns' | 'screener' | 'terminal' | 'surveillance'
-  const [activePage, setActivePage] = useState<ActivePageType>(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.hash === '#screener') return 'screener';
-      if (window.location.hash === '#terminal') return 'terminal';
-      if (window.location.hash === '#surveillance') return 'surveillance';
-    }
-    return 'patterns';
-  });
+  // Auth & Profile
+  const { user, profile, loading: authLoading, updateProfileData } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>(null);
+  const [authInitialMode, setAuthInitialMode] = useState<'signin' | 'signup'>('signin');
 
-  // Listen to hash changes for browser back/forward buttons
-  useEffect(() => {
-    const handleHashChange = () => {
-      if (window.location.hash === '#screener') {
-        setActivePage('screener');
-      } else if (window.location.hash === '#terminal') {
-        setActivePage('terminal');
-      } else if (window.location.hash === '#surveillance') {
-        setActivePage('surveillance');
-      } else if (window.location.hash === '#patterns') {
-        setActivePage('patterns');
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+  const handleOpenAuthModal = useCallback((mode: 'signin' | 'signup' = 'signin', reason: AuthPromptReason = null) => {
+    setAuthInitialMode(mode);
+    setAuthPromptReason(reason);
+    setIsAuthModalOpen(true);
   }, []);
 
+  // Active Category: 'patterns' | 'screener' | 'terminal' | 'surveillance'
+  // Default main page of the site is always 'screener'
+  const [activePage, setActivePage] = useState<ActivePageType>('screener');
+
+  // Enforce access control and hash sync
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (!user) {
+        setActivePage('screener');
+        if (hash && hash !== '#screener' && hash !== '') {
+          handleOpenAuthModal('signin', 'general');
+          window.location.hash = 'screener';
+        }
+        return;
+      }
+      if (hash === '#patterns') {
+        setActivePage('patterns');
+      } else if (hash === '#terminal') {
+        setActivePage('terminal');
+      } else if (hash === '#surveillance') {
+        setActivePage('surveillance');
+      } else {
+        // default / root / #screener
+        setActivePage('screener');
+      }
+    };
+
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [user, handleOpenAuthModal]);
+
   const handlePageChange = (page: ActivePageType) => {
+    if (!user && page !== 'screener') {
+      handleOpenAuthModal('signin', 'general');
+      return;
+    }
     setActivePage(page);
     if (typeof window !== 'undefined') {
       window.location.hash = page;
     }
   };
 
-  // Auth & Profile
-  const { user, profile, loading: authLoading, updateProfileData } = useAuth();
   const { activeCount: surveillanceActiveCount } = useSurveillance();
 
   // Watchlist stored per user (isolated)
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [watchlistFolders, setWatchlistFolders] = useState<Record<string, string[]>>({});
 
-  // Synchronize watchlist with current logged-in user profile & user-scoped storage
+  // Synchronize watchlist with current logged-in user profile & user-scoped storage (strictly isolated, guests see 0)
   useEffect(() => {
-    // Helper to check if stored watchlist is just the old hardcoded default 3 Binance coins
-    const isOldHardcodedDefault = (list: string[]) => {
-      if (list.length === 3) {
-        const norm = list.map((s) => s.toLowerCase());
-        const hasBtc = norm.some((s) => s.includes('binance') && s.includes('btcusdt'));
-        const hasEth = norm.some((s) => s.includes('binance') && s.includes('ethusdt'));
-        const hasSol = norm.some((s) => s.includes('binance') && s.includes('solusdt'));
-        if (hasBtc && hasEth && hasSol) return true;
-      }
-      return false;
-    };
-
     if (!user) {
-      try {
-        const guestSaved = localStorage.getItem('crypto_screener_watchlist_guest');
-        if (guestSaved) {
-          const parsed = JSON.parse(guestSaved);
-          if (Array.isArray(parsed)) {
-            if (isOldHardcodedDefault(parsed)) {
-              setWatchlist([]);
-              try {
-                localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify([]));
-              } catch {}
-              return;
-            }
-            setWatchlist(normalizeWatchlist(parsed));
-            return;
-          }
-        }
-      } catch {}
       setWatchlist([]);
       return;
     }
 
     if (profile?.watchlist && Array.isArray(profile.watchlist)) {
-      if (isOldHardcodedDefault(profile.watchlist)) {
-        setWatchlist([]);
-        updateProfileData({ watchlist: [] }).catch(() => {});
-        return;
-      }
-      setWatchlist(normalizeWatchlist(profile.watchlist));
+      setWatchlist(Array.from(new Set(profile.watchlist)));
       try {
-        localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(normalizeWatchlist(profile.watchlist)));
+        localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(profile.watchlist));
       } catch {}
       return;
     }
@@ -184,11 +174,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          if (isOldHardcodedDefault(parsed)) {
-            setWatchlist([]);
-            return;
-          }
-          setWatchlist(normalizeWatchlist(parsed));
+          setWatchlist(Array.from(new Set(parsed)));
           return;
         }
       }
@@ -236,31 +222,31 @@ export default function App() {
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  // MetaScalp terminal linking state (isolated per user)
-  const [metaScalpSettings, setMetaScalpSettings] = useState<MetaScalpSettings>(() =>
-    getStoredMetaScalpSettings(user?.uid)
+  // Unified terminal linking state (MetaScalp, Vataga, Tiger - isolated per user)
+  const [unifiedLinkingSettings, setUnifiedLinkingSettings] = useState<UnifiedLinkingSettings>(() =>
+    getStoredUnifiedLinkingSettings(user?.uid)
   );
 
   useEffect(() => {
     if (!user) return;
-    if (profile?.metaScalpSettings) {
-      setMetaScalpSettings(profile.metaScalpSettings);
-      saveStoredMetaScalpSettings(profile.metaScalpSettings, user.uid);
+    if (profile?.unifiedLinkingSettings) {
+      setUnifiedLinkingSettings(profile.unifiedLinkingSettings);
+      saveStoredUnifiedLinkingSettings(profile.unifiedLinkingSettings, user.uid);
     } else {
-      const userSettings = getStoredMetaScalpSettings(user.uid);
-      setMetaScalpSettings(userSettings);
+      const userSettings = getStoredUnifiedLinkingSettings(user.uid);
+      setUnifiedLinkingSettings(userSettings);
     }
-  }, [user?.uid, profile?.metaScalpSettings]);
+  }, [user?.uid, profile?.unifiedLinkingSettings]);
 
-  const handleMetaScalpSettingsChange = (newSettings: MetaScalpSettings) => {
-    setMetaScalpSettings(newSettings);
+  const handleUnifiedLinkingSettingsChange = (newSettings: UnifiedLinkingSettings) => {
+    setUnifiedLinkingSettings(newSettings);
     if (user) {
-      saveStoredMetaScalpSettings(newSettings, user.uid);
-      updateProfileData({ metaScalpSettings: newSettings }).catch(() => {});
+      saveStoredUnifiedLinkingSettings(newSettings, user.uid);
+      updateProfileData({ unifiedLinkingSettings: newSettings }).catch(() => {});
     }
   };
 
-  const [isMetaScalpModalOpen, setIsMetaScalpModalOpen] = useState<boolean>(false);
+  const [isLinkingModalOpen, setIsLinkingModalOpen] = useState<boolean>(false);
   const [metaScalpToast, setMetaScalpToast] = useState<MetaScalpToastState | null>(null);
 
   // Telegram price alerts state
@@ -275,20 +261,7 @@ export default function App() {
   const [selectedArchivedItem, setSelectedArchivedItem] = useState<ArchivedFormation | null>(null);
 
   // Authentication & Profile modals
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
-  const [profileModalTab, setProfileModalTab] = useState<'general' | 'exchange_api'>('general');
-
-  useEffect(() => {
-    const handleOpenProfileModal = (e: any) => {
-      if (e?.detail?.tab) {
-        setProfileModalTab(e.detail.tab);
-      }
-      setIsProfileModalOpen(true);
-    };
-    window.addEventListener('open_user_profile_modal', handleOpenProfileModal);
-    return () => window.removeEventListener('open_user_profile_modal', handleOpenProfileModal);
-  }, []);
 
   // Auto-dismiss Alert toast
   useEffect(() => {
@@ -320,9 +293,13 @@ export default function App() {
   }, []);
 
   const handleOpenTelegramAlerts = useCallback((prefill?: any) => {
+    if (!user) {
+      handleOpenAuthModal('signin', 'alerts');
+      return;
+    }
     setTelegramPrefill(prefill || null);
     setIsTelegramModalOpen(true);
-  }, []);
+  }, [user, handleOpenAuthModal]);
 
   const handleAlertToast = useCallback(
     (toast: { symbol: string; targetPrice: number; condition: 'gte' | 'lte'; message?: string }) => {
@@ -350,6 +327,10 @@ export default function App() {
   // Send ticker to MetaScalp terminal
   const handleSendToMetaScalp = useCallback(
     async (coin: ScannedCoin) => {
+      if (!user) {
+        handleOpenAuthModal('signin', 'linking');
+        return;
+      }
       if (!metaScalpSettings.enabled) {
         setIsMetaScalpModalOpen(true);
         return;
@@ -384,19 +365,23 @@ export default function App() {
         });
       }
     },
-    [metaScalpSettings]
+    [user, metaScalpSettings, handleOpenAuthModal]
   );
 
   // Handler when selecting pair for details modal
   const handleSelectPair = useCallback(
     (coin: ScannedCoin, formation?: DetectedFormation) => {
+      if (!user) {
+        handleOpenAuthModal('signin', 'chart');
+        return;
+      }
       setSelectedArchivedItem(null);
       setSelectedPair({ coin, formation: formation || coin.formations[0] });
       if (metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick) {
         handleSendToMetaScalp(coin);
       }
     },
-    [metaScalpSettings, handleSendToMetaScalp]
+    [user, metaScalpSettings, handleSendToMetaScalp, handleOpenAuthModal]
   );
 
   // Handler when selecting archived formation to restore
@@ -537,17 +522,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchScreenerData]);
 
-  // Toggle watchlist (isolated per user profile, exchange, and marketType)
-  const handleToggleWatchlist = (target: string | ScannedCoin | CoinIdentifier) => {
-    const targetKey = getCoinWatchlistKey(target);
-
+  // Toggle watchlist (isolated per user profile or local guest storage)
+  const handleToggleWatchlist = (symbol: string) => {
     if (!user) {
       setWatchlist((prev) => {
-        const uniquePrev = normalizeWatchlist(prev);
-        const exists = isCoinInWatchlist(uniquePrev, target);
-        const next = exists
-          ? uniquePrev.filter((k) => k !== targetKey && !isCoinInWatchlist([k], target))
-          : [...uniquePrev, targetKey];
+        const uniquePrev = Array.from(new Set(prev));
+        const next = uniquePrev.includes(symbol)
+          ? uniquePrev.filter((s) => s !== symbol)
+          : [...uniquePrev, symbol];
         const cleanNext = Array.from(new Set(next));
         try {
           localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify(cleanNext));
@@ -557,11 +539,10 @@ export default function App() {
       return;
     }
     setWatchlist((prev) => {
-      const uniquePrev = normalizeWatchlist(prev);
-      const exists = isCoinInWatchlist(uniquePrev, target);
-      const next = exists
-        ? uniquePrev.filter((k) => k !== targetKey && !isCoinInWatchlist([k], target))
-        : [...uniquePrev, targetKey];
+      const uniquePrev = Array.from(new Set(prev));
+      const next = uniquePrev.includes(symbol)
+        ? uniquePrev.filter((s) => s !== symbol)
+        : [...uniquePrev, symbol];
       const cleanNext = Array.from(new Set(next));
       try {
         localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(cleanNext));
@@ -700,17 +681,35 @@ export default function App() {
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         onRefresh={() => fetchScreenerData()}
-        onOpenWatchlist={() => setIsWatchlistOpen(true)}
-        onOpenArchive={() => setIsArchiveModalOpen(true)}
+        onOpenWatchlist={() => {
+          if (!user) {
+            handleOpenAuthModal('signin', 'general');
+            return;
+          }
+          setIsWatchlistOpen(true);
+        }}
+        onOpenArchive={() => {
+          if (!user) {
+            handleOpenAuthModal('signin', 'general');
+            return;
+          }
+          setIsArchiveModalOpen(true);
+        }}
         archiveCount={archivedFormations.length}
         onOpenGuide={() => setIsGuideOpen(true)}
-        onOpenMetaScalp={() => setIsMetaScalpModalOpen(true)}
+        onOpenMetaScalp={() => {
+          if (!user) {
+            handleOpenAuthModal('signin', 'linking');
+            return;
+          }
+          setIsMetaScalpModalOpen(true);
+        }}
         metaScalpSettings={metaScalpSettings}
         onOpenTelegramAlerts={() => handleOpenTelegramAlerts()}
         telegramAlertsCount={activeAlertsCount}
         surveillanceCount={surveillanceActiveCount}
         lastUpdated={lastUpdated}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenAuth={() => handleOpenAuthModal('signin', null)}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         activePage={activePage}
         onPageChange={handlePageChange}
@@ -727,7 +726,7 @@ export default function App() {
             metaScalpBinding={metaScalpSettings.binding}
             onOpenTelegramAlerts={handleOpenTelegramAlerts}
             onOpenFullscreenModal={(coin, formation) => handleSelectPair(coin, formation)}
-            onReturnToPatterns={() => handlePageChange('patterns')}
+            onReturnToPatterns={() => handlePageChange('screener')}
           />
         ) : activePage === 'surveillance' ? (
           <SurveillancePage
@@ -749,8 +748,15 @@ export default function App() {
             watchlist={watchlist}
             onToggleWatchlist={handleToggleWatchlist}
             onOpenTelegramAlerts={handleOpenTelegramAlerts}
-            onOpenWatchlist={() => setIsWatchlistOpen(true)}
+            onOpenWatchlist={() => {
+              if (!user) {
+                handleOpenAuthModal('signin', 'general');
+                return;
+              }
+              setIsWatchlistOpen(true);
+            }}
             formationsCoins={coins}
+            onOpenAuthModal={handleOpenAuthModal}
           />
         ) : (
           <>
@@ -876,7 +882,7 @@ export default function App() {
                     key={`${coin.exchange}-${coin.symbol}-${coin.marketType}-${formation.id}-${idx}`}
                     coin={coin}
                     formation={formation}
-                    isWatchlisted={isCoinInWatchlist(watchlist, coin)}
+                    isWatchlisted={watchlist.includes(coin.symbol)}
                     onToggleWatchlist={handleToggleWatchlist}
                     onSelect={handleSelectPair}
                     onSendMetaScalp={handleSendToMetaScalp}
@@ -1000,7 +1006,7 @@ export default function App() {
         isOpen={isTelegramModalOpen}
         onClose={() => setIsTelegramModalOpen(false)}
         prefill={telegramPrefill}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenAuth={() => handleOpenAuthModal('signin', 'alerts')}
         onAlertCreated={(alert) => {
           setAlertToast({
             id: Date.now(),
@@ -1015,16 +1021,21 @@ export default function App() {
       {/* User Authentication Modal (Registration / Login) */}
       <AuthModal
         isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          setAuthPromptReason(null);
+        }}
+        initialMode={authInitialMode}
+        promptReason={authPromptReason}
         onSuccess={() => {
           setIsAuthModalOpen(false);
+          setAuthPromptReason(null);
         }}
       />
 
       {/* User Profile & Isolated Settings Modal */}
       <UserProfileModal
         isOpen={isProfileModalOpen}
-        initialTab={profileModalTab}
         onClose={() => setIsProfileModalOpen(false)}
         onOpenAlerts={() => handleOpenTelegramAlerts()}
         onOpenArchive={() => setIsArchiveModalOpen(true)}

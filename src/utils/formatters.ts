@@ -98,11 +98,11 @@ export function getChartPriceFormat(samplePrice: number) {
  * Format USD volumes (e.g. $14.2B, $45.1M, $520.4K)
  */
 export function formatVolume(vol: number | undefined | null): string {
-  if (!vol || vol <= 0 || isNaN(vol)) return '0';
-  if (vol >= 1_000_000_000) return `${(vol / 1_000_000_000).toFixed(2)}B`;
-  if (vol >= 1_000_000) return `${(vol / 1_000_000).toFixed(1)}M`;
-  if (vol >= 1_000) return `${(vol / 1_000).toFixed(1)}K`;
-  return `${vol.toFixed(0)}`;
+  if (!vol || vol <= 0 || isNaN(vol)) return '$0';
+  if (vol >= 1_000_000_000) return `$${(vol / 1_000_000_000).toFixed(2)}B`;
+  if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(1)}M`;
+  if (vol >= 1_000) return `$${(vol / 1_000).toFixed(1)}K`;
+  return `$${vol.toFixed(0)}`;
 }
 
 /**

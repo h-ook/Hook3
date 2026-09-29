@@ -2,9 +2,10 @@ import { ExchangeApiCredentials, ExchangeId, MarketType, PlacedOrder, AccountBal
 
 const STORAGE_PREFIX = 'signalhook_exchange_api_';
 
-export function getLocalExchangeCredentials(exchange: ExchangeId): ExchangeApiCredentials | null {
+export function getLocalExchangeCredentials(exchange: ExchangeId, userId?: string): ExchangeApiCredentials | null {
+  if (!userId || userId === 'guest') return null;
   try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${exchange}`);
+    const raw = localStorage.getItem(`${STORAGE_PREFIX}_${userId}_${exchange}`);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -12,17 +13,19 @@ export function getLocalExchangeCredentials(exchange: ExchangeId): ExchangeApiCr
   }
 }
 
-export function saveLocalExchangeCredentials(creds: ExchangeApiCredentials): void {
+export function saveLocalExchangeCredentials(creds: ExchangeApiCredentials, userId?: string): void {
+  if (!userId || userId === 'guest') return;
   try {
-    localStorage.setItem(`${STORAGE_PREFIX}${creds.exchange}`, JSON.stringify(creds));
+    localStorage.setItem(`${STORAGE_PREFIX}_${userId}_${creds.exchange}`, JSON.stringify(creds));
   } catch (err) {
     console.error('Failed to save exchange credentials locally', err);
   }
 }
 
-export function removeLocalExchangeCredentials(exchange: ExchangeId): void {
+export function removeLocalExchangeCredentials(exchange: ExchangeId, userId?: string): void {
+  if (!userId || userId === 'guest') return;
   try {
-    localStorage.removeItem(`${STORAGE_PREFIX}${exchange}`);
+    localStorage.removeItem(`${STORAGE_PREFIX}_${userId}_${exchange}`);
   } catch {}
 }
 

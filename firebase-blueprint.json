@@ -67,10 +67,6 @@
           "type": "object",
           "description": "User personal MetaScalp terminal link configuration"
         },
-        "exchangeApiKeys": {
-          "type": "object",
-          "description": "User connected cryptocurrency exchange API keys and settings"
-        },
         "inviteCode": {
           "type": "string",
           "description": "Special access code used during registration",

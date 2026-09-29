@@ -23,7 +23,7 @@ interface FormationCardProps {
   coin: ScannedCoin;
   formation: DetectedFormation;
   isWatchlisted: boolean;
-  onToggleWatchlist: (coinOrSymbol: string | ScannedCoin) => void;
+  onToggleWatchlist: (symbol: string) => void;
   onSelect: (coin: ScannedCoin, formation: DetectedFormation) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
@@ -377,7 +377,7 @@ export const FormationCard: React.FC<FormationCardProps> = ({
               </button>
 
               <button
-                onClick={() => onToggleWatchlist(coin)}
+                onClick={() => onToggleWatchlist(coin.symbol)}
                 title={isWatchlisted ? 'Видалити з обраного' : 'Додати в обране'}
                 className={`p-2 rounded-xl border transition-colors cursor-pointer ${
                   isWatchlisted

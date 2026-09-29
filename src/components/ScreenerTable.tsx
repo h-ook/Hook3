@@ -3,12 +3,11 @@ import { ExternalLink, Star, BarChart2, TrendingUp, TrendingDown, Zap, Send } fr
 import { ScannedCoin, DetectedFormation } from '../types';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { useLanguage } from '../context/LanguageContext';
-import { isCoinInWatchlist } from '../utils/watchlistUtils';
 
 interface ScreenerTableProps {
   items: { coin: ScannedCoin; formation: DetectedFormation }[];
   watchlist: string[];
-  onToggleWatchlist: (coinOrSymbol: string | ScannedCoin) => void;
+  onToggleWatchlist: (symbol: string) => void;
   onSelect: (coin: ScannedCoin, formation: DetectedFormation) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
@@ -49,7 +48,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
         </thead>
         <tbody className="divide-y divide-slate-800/60 font-sans">
           {items.map(({ coin, formation }, idx) => {
-            const isWatchlisted = isCoinInWatchlist(watchlist, coin);
+            const isWatchlisted = watchlist.includes(coin.symbol);
             const isPositive = coin.priceChange24h >= 0;
             const isBullish = formation.bias === 'bullish';
             const isBearish = formation.bias === 'bearish';
@@ -63,7 +62,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
                 {/* Watchlist toggle */}
                 <td className="py-3 px-2 sm:px-3 text-center" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => onToggleWatchlist(coin)}
+                    onClick={() => onToggleWatchlist(coin.symbol)}
                     className="text-slate-500 hover:text-amber-400 transition-colors p-1"
                   >
                     <Star className={`w-3.5 h-3.5 ${isWatchlisted ? 'fill-amber-400 text-amber-400' : ''}`} />
@@ -209,7 +208,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
 
                 {/* Volume */}
                 <td className="py-3 px-3 sm:px-4 text-right font-mono text-slate-400 hidden md:table-cell">
-                  ${formatVolume(coin.volume24hUsd)}
+                  {formatVolume(coin.volume24hUsd)}
                 </td>
 
                 {/* Trading Levels (Entry, Target, Stop) */}

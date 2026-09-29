@@ -33,7 +33,6 @@ import { fetchDirectKlines } from '../utils/directExchangeClient';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
-import { CoinIdentifier } from '../utils/watchlistUtils';
 import { SmartAnalysisBlock } from './SmartAnalysisBlock';
 import { ChartTopAnalysisText } from './ChartTopAnalysisText';
 
@@ -49,7 +48,7 @@ interface FormationDetailsModalProps {
   archivedItem?: ArchivedFormation | null;
   allCoins?: ScannedCoin[];
   watchlist?: string[];
-  onToggleWatchlist?: (coinOrSymbol: string | ScannedCoin | CoinIdentifier) => void;
+  onToggleWatchlist?: (symbol: string) => void;
 }
 
 export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({

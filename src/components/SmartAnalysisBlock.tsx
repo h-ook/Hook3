@@ -349,7 +349,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="font-bold text-white text-sm font-mono truncate mr-1">
-              ${formatVolume(data.participants.largePlayer?.clusterVolumeUsd || 250000)}
+              {formatVolume(data.participants.largePlayer?.clusterVolumeUsd || 250000)}
             </span>
             <span className="text-[10px] text-cyan-300 font-sans shrink-0 font-mono">
               {data.participants.largePlayer?.confidencePct || 85}% Conf.
@@ -651,10 +651,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 )}
               </div>
               <span className="font-bold text-white text-sm font-mono block">
-                ${formatVolume(data.volumeMetrics.volume1hUsd)}
+                {formatVolume(data.volumeMetrics.volume1hUsd)}
               </span>
               <span className="text-[10px] text-slate-400 block font-sans">
-                24h оборот: ${formatVolume(data.volumeMetrics.volume24hUsd)}
+                24h оборот: {formatVolume(data.volumeMetrics.volume24hUsd)}
               </span>
             </div>
 
@@ -731,7 +731,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 {formatCryptoPrice(data.orderbook.bidWallPrice)}
               </div>
               <div className="text-[11px] text-emerald-300">
-                Обсяг стіни: ${formatVolume(data.orderbook.bidWallUsd)}
+                Обсяг стіни: {formatVolume(data.orderbook.bidWallUsd)}
               </div>
             </div>
 
@@ -757,7 +757,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 {formatCryptoPrice(data.orderbook.askWallPrice)}
               </div>
               <div className="text-[11px] text-rose-300">
-                Обсяг стіни: ${formatVolume(data.orderbook.askWallUsd)}
+                Обсяг стіни: {formatVolume(data.orderbook.askWallUsd)}
               </div>
             </div>
           </div>
@@ -789,7 +789,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold block">${formatVolume(order.amountUsd)}</span>
+                      <span className="font-bold block">{formatVolume(order.amountUsd)}</span>
                       <span className="text-[9px] text-slate-400">{order.distancePct}% від поточної</span>
                     </div>
                   </div>
@@ -854,7 +854,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 </span>
               </div>
               <div className="text-base font-bold text-white">
-                ${formatVolume(data.derivatives.binanceOI.currentUsd)}
+                {formatVolume(data.derivatives.binanceOI.currentUsd)}
               </div>
               {/* Mini Sparkline Bar Chart */}
               <div className="flex items-end gap-1 h-6 pt-1">
@@ -867,7 +867,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                       key={i}
                       className="flex-1 bg-cyan-500/60 rounded-t hover:bg-cyan-400 transition-all"
                       style={{ height: `${heightPct}%` }}
-                      title={`Binance OI: $${formatVolume(val)}`}
+                      title={`Binance OI: ${formatVolume(val)}`}
                     />
                   );
                 })}
@@ -883,7 +883,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 </span>
               </div>
               <div className="text-base font-bold text-white">
-                ${formatVolume(data.derivatives.bybitOI.currentUsd)}
+                {formatVolume(data.derivatives.bybitOI.currentUsd)}
               </div>
               {/* Mini Sparkline Bar Chart */}
               <div className="flex items-end gap-1 h-6 pt-1">
@@ -896,7 +896,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                       key={i}
                       className="flex-1 bg-indigo-500/60 rounded-t hover:bg-indigo-400 transition-all"
                       style={{ height: `${heightPct}%` }}
-                      title={`Bybit OI: $${formatVolume(val)}`}
+                      title={`Bybit OI: ${formatVolume(val)}`}
                     />
                   );
                 })}
@@ -920,7 +920,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 </span>
               </div>
               <span className="text-[10px] text-slate-400 font-sans block">
-                Сумарний OI: ${formatVolume(data.derivatives.totalOIUsd)}
+                Сумарний OI: {formatVolume(data.derivatives.totalOIUsd)}
               </span>
             </div>
           </div>
@@ -1025,7 +1025,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
                   <span className="text-[10px] text-slate-400 block">Відстежений обсяг кластерів</span>
                   <span className="font-bold text-white font-mono text-xs mt-0.5 block">
-                    ${formatVolume(data.participants.largePlayer?.clusterVolumeUsd || 320000)}
+                    {formatVolume(data.participants.largePlayer?.clusterVolumeUsd || 320000)}
                   </span>
                 </div>
               </div>
@@ -1060,7 +1060,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-2 font-mono">
-                          <span className="font-bold text-white">${formatVolume(cluster.volumeUsd)}</span>
+                          <span className="font-bold text-white">{formatVolume(cluster.volumeUsd)}</span>
                           <span className="text-[9px] text-slate-400 font-sans hidden sm:inline">
                             {cluster.timestampDesc}
                           </span>

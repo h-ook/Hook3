@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { ScannedCoin, DetectedFormation, Timeframe, ExchangeId, MarketType, TerminalBlockMode } from '../../types';
 import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
-import { isCoinInWatchlist } from '../../utils/watchlistUtils';
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -49,10 +48,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     }
   }, [isOpen, initialMode]);
 
-  const watchlistedCount = useMemo(() => {
-    return coins.filter((c) => isCoinInWatchlist(watchlist, c)).length;
-  }, [coins, watchlist]);
-
   const filteredCoins = useMemo(() => {
     let result = coins;
 
@@ -71,7 +66,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     if (filterTab === 'formations') {
       result = result.filter((c) => c.formations && c.formations.length > 0);
     } else if (filterTab === 'watchlist') {
-      result = result.filter((c) => isCoinInWatchlist(watchlist, c));
+      result = result.filter((c) => watchlist.includes(c.symbol));
     } else if (filterTab === 'gainers') {
       result = [...result].sort((a, b) => b.priceChange24h - a.priceChange24h);
     } else if (filterTab === 'volume') {
@@ -169,7 +164,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
               }`}
             >
               <Star className="w-3 h-3 text-amber-400" />
-              Обрані ({watchlistedCount})
+              Обрані ({watchlist.length})
             </button>
 
             <button

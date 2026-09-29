@@ -33,16 +33,12 @@ import { AddChartModal } from './terminal/AddChartModal';
 import { TerminalSettingsDrawer } from './terminal/TerminalSettingsDrawer';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
-import {
-  getCoinWatchlistKey,
-  isCoinInWatchlist,
-  normalizeWatchlist,
-} from '../utils/watchlistUtils';
+import { useAuth } from '../context/AuthContext';
 
 interface TerminalPageProps {
   coins: ScannedCoin[];
   watchlist: string[];
-  onToggleWatchlist: (coinOrSymbol: string | ScannedCoin) => void;
+  onToggleWatchlist: (symbol: string) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
   onOpenTelegramAlerts?: (prefill?: any) => void;
@@ -73,19 +69,23 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   onReturnToPatterns,
 }) => {
   const { preferences } = useAppPreferences();
+  const { user, profile, updateProfileData } = useAuth();
 
-  // Initialize blocks from localStorage or default to BTCUSDT with preferences
+  // Initialize blocks from user profile or scoped localStorage
   const [blocks, setBlocks] = useState<TerminalChartBlock[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_BLOCKS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((b: any) => ({ ...b, mode: 'tradingview' as const }));
-        }
+    if (user) {
+      if (profile?.terminalSettings?.blocks && Array.isArray(profile.terminalSettings.blocks) && profile.terminalSettings.blocks.length > 0) {
+        return profile.terminalSettings.blocks.map((b: any) => ({ ...b, mode: 'tradingview' as const }));
       }
-    } catch (e) {
-      console.error('Failed to load saved terminal blocks:', e);
+      try {
+        const saved = localStorage.getItem(`${STORAGE_BLOCKS_KEY}_${user.uid}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((b: any) => ({ ...b, mode: 'tradingview' as const }));
+          }
+        }
+      } catch (e) {}
     }
     const prefs = getStoredPreferences();
     const defaultEx = prefs.defaultExchange === 'all' ? 'binance' : prefs.defaultExchange;
@@ -105,17 +105,41 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     ];
   });
 
-  // Workspace configuration
+  // Workspace configuration (scoped per user)
   const [config, setConfig] = useState<TerminalWorkspaceConfig>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return { ...DEFAULT_CONFIG, ...parsed };
-      }
-    } catch (e) {}
+    if (user && profile?.terminalSettings) {
+      return {
+        ...DEFAULT_CONFIG,
+        columns: profile.terminalSettings.columns || 2,
+        blockHeight: (profile.terminalSettings.blockHeight as any) || 'medium',
+      };
+    }
+    if (user) {
+      try {
+        const saved = localStorage.getItem(`${STORAGE_CONFIG_KEY}_${user.uid}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return { ...DEFAULT_CONFIG, ...parsed };
+        }
+      } catch (e) {}
+    }
     return DEFAULT_CONFIG;
   });
+
+  // Sync profile terminalSettings changes
+  useEffect(() => {
+    if (!user) return;
+    if (profile?.terminalSettings?.blocks && Array.isArray(profile.terminalSettings.blocks) && profile.terminalSettings.blocks.length > 0) {
+      setBlocks(profile.terminalSettings.blocks.map((b: any) => ({ ...b, mode: 'tradingview' as const })));
+    }
+    if (profile?.terminalSettings?.columns) {
+      setConfig((prev) => ({
+        ...prev,
+        columns: profile.terminalSettings?.columns || prev.columns,
+        blockHeight: (profile.terminalSettings?.blockHeight as any) || prev.blockHeight,
+      }));
+    }
+  }, [user?.uid, profile?.terminalSettings]);
 
   // Active coin for single-chart full view (matching FullscreenChartModal)
   const [activeCoin, setActiveCoin] = useState<ScannedCoin>(() => {
@@ -193,19 +217,35 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     }
   }, [watchlist]);
 
-  // Save blocks to localStorage
+  // Save blocks to user-scoped storage and profile
   useEffect(() => {
+    if (!user) return;
     try {
-      localStorage.setItem(STORAGE_BLOCKS_KEY, JSON.stringify(blocks));
+      localStorage.setItem(`${STORAGE_BLOCKS_KEY}_${user.uid}`, JSON.stringify(blocks));
     } catch (e) {}
-  }, [blocks]);
+    updateProfileData({
+      terminalSettings: {
+        columns: config.columns,
+        blockHeight: (config.blockHeight as any) || 'medium',
+        blocks: blocks,
+      },
+    }).catch(() => {});
+  }, [blocks, user?.uid]);
 
-  // Save config to localStorage
+  // Save config to user-scoped storage and profile
   useEffect(() => {
+    if (!user) return;
     try {
-      localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(config));
+      localStorage.setItem(`${STORAGE_CONFIG_KEY}_${user.uid}`, JSON.stringify(config));
     } catch (e) {}
-  }, [config]);
+    updateProfileData({
+      terminalSettings: {
+        columns: config.columns,
+        blockHeight: (config.blockHeight as any) || 'medium',
+        blocks: blocks,
+      },
+    }).catch(() => {});
+  }, [config, user?.uid]);
 
   // Browser fullscreen change listener
   useEffect(() => {
@@ -252,24 +292,17 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
   // Watchlist favorites items
   const favoriteCoins = useMemo(() => {
-    const uniqueKeys: string[] = normalizeWatchlist(localWatchlist);
-
-    return uniqueKeys.map((key: string) => {
-      const found = coins.find((c) => isCoinInWatchlist([key], c));
-      if (found) return found;
-
-      const parts = key.split(':');
-      let ex = 'binance' as ExchangeId;
-      let mt = 'futures' as MarketType;
-      let sym = key;
-      if (parts.length >= 3) {
-        ex = (parts[0].toLowerCase() === 'bybit' ? 'bybit' : 'binance') as ExchangeId;
-        mt = (parts[1].toLowerCase() === 'spot' ? 'spot' : 'futures') as MarketType;
-        sym = parts.slice(2).join(':');
-      } else if (parts.length === 2) {
-        ex = (parts[0].toLowerCase() === 'bybit' ? 'bybit' : 'binance') as ExchangeId;
-        sym = parts[1];
+    const uniqueSymbols: string[] = Array.from(new Set<string>(localWatchlist));
+    const coinsMap = new Map<string, ScannedCoin>();
+    coins.forEach((c) => {
+      if (!coinsMap.has(c.symbol)) {
+        coinsMap.set(c.symbol, c);
       }
+    });
+
+    return uniqueSymbols.map((sym: string) => {
+      const found = coinsMap.get(sym);
+      if (found) return found;
       const clean = sym.toUpperCase();
       const base = clean.replace(/(USDT|BUSD|USDC)$/, '') || clean;
       const quote = clean.slice(base.length) || 'USDT';
@@ -277,8 +310,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         symbol: clean,
         baseAsset: base,
         quoteAsset: quote,
-        exchange: ex,
-        marketType: mt,
+        exchange: 'binance' as ExchangeId,
+        marketType: 'futures' as MarketType,
         currentPrice: 0,
         priceChange24h: 0,
         formations: [],
@@ -296,17 +329,16 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     );
   }, [favoriteCoins, searchQuery]);
 
-  const handleRemoveFromWatchlist = (coinOrKey: ScannedCoin | string, e: React.MouseEvent) => {
+  const handleRemoveFromWatchlist = (sym: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const targetKey = getCoinWatchlistKey(coinOrKey);
     setLocalWatchlist((prev) => {
-      const next = prev.filter((s) => s !== targetKey && !isCoinInWatchlist([s], coinOrKey));
+      const next = prev.filter((s) => s !== sym);
       try {
         localStorage.setItem('crypto_screener_watchlist', JSON.stringify(next));
       } catch {}
       return next;
     });
-    onToggleWatchlist?.(coinOrKey);
+    onToggleWatchlist?.(sym);
   };
 
   const handleSelectFavoriteCoin = (favCoin: ScannedCoin) => {
@@ -429,11 +461,11 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       const source = updated[sourceIndex];
       const target = updated[targetIndex];
 
-      // Build combined block adapting colSpan to screen
+      // Build combined block (chart on top, orderbook below)
       const mergedBlock: TerminalChartBlock = {
         ...target,
         mode: 'combined',
-        colSpan: config.columns > 1 ? 2 : 1,
+        colSpan: target.colSpan || 1,
         domSettings: source.domSettings || target.domSettings,
       };
 
@@ -997,7 +1029,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               </div>
             ) : (
               filteredFavorites.map((favCoin, idx) => {
-                const isSelected = favCoin.symbol === activeCoin.symbol && favCoin.exchange === activeCoin.exchange;
+                const isSelected = favCoin.symbol === activeCoin.symbol;
                 const isFavPositive = (favCoin.priceChange24h || 0) >= 0;
                 return (
                   <div
@@ -1049,7 +1081,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       </div>
 
                       <button
-                        onClick={(e) => handleRemoveFromWatchlist(favCoin, e)}
+                        onClick={(e) => handleRemoveFromWatchlist(favCoin.symbol, e)}
                         className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                         title="Видалити з обраного"
                       >
