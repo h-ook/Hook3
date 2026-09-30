@@ -6,10 +6,11 @@ import { ScreenerTable } from './components/ScreenerTable';
 import { CoinScreenerPage } from './components/CoinScreenerPage';
 import { TerminalPage } from './components/TerminalPage';
 import { SurveillancePage } from './components/SurveillancePage';
+import { ReplayPage } from './components/ReplayPage';
 import { FormationDetailsModal } from './components/FormationDetailsModal';
 import { FormationGuideModal } from './components/FormationGuideModal';
 import { WatchlistDrawer } from './components/WatchlistDrawer';
-import { UnifiedLinkingModal } from './components/UnifiedLinkingModal';
+import { MetaScalpModal } from './components/MetaScalpModal';
 import { MetaScalpToast, MetaScalpToastState } from './components/MetaScalpToast';
 import { TelegramAlertsModal } from './components/TelegramAlertsModal';
 import { AuthModal, AuthPromptReason } from './components/AuthModal';
@@ -25,14 +26,9 @@ import {
   MetaScalpSettings,
   getStoredMetaScalpSettings,
   saveStoredMetaScalpSettings,
+  sendTickerToMetaScalp,
 } from './utils/metaScalpService';
-import {
-  DEFAULT_UNIFIED_LINKING_SETTINGS,
-  getStoredUnifiedLinkingSettings,
-  saveStoredUnifiedLinkingSettings,
-  sendTickerToUnifiedTerminals,
-} from './utils/terminalLinkingService';
-import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, UnifiedLinkingSettings } from './types';
+import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType } from './types';
 import { runDirectClientScan, getFallbackScannedCoins } from './utils/directExchangeClient';
 import {
   AlertCircle,
@@ -111,6 +107,10 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
+      if (hash === '#replay') {
+        setActivePage('replay');
+        return;
+      }
       if (!user) {
         setActivePage('screener');
         if (hash && hash !== '#screener' && hash !== '') {
@@ -125,6 +125,8 @@ export default function App() {
         setActivePage('terminal');
       } else if (hash === '#surveillance') {
         setActivePage('surveillance');
+      } else if (hash === '#replay') {
+        setActivePage('replay');
       } else {
         // default / root / #screener
         setActivePage('screener');
@@ -137,7 +139,7 @@ export default function App() {
   }, [user, handleOpenAuthModal]);
 
   const handlePageChange = (page: ActivePageType) => {
-    if (!user && page !== 'screener') {
+    if (!user && page !== 'screener' && page !== 'replay') {
       handleOpenAuthModal('signin', 'general');
       return;
     }
@@ -222,32 +224,28 @@ export default function App() {
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  // Unified terminal linking state (MetaScalp, Vataga, Tiger - isolated per user)
-  const [unifiedLinkingSettings, setUnifiedLinkingSettings] = useState<UnifiedLinkingSettings>(() =>
-    getStoredUnifiedLinkingSettings(user?.uid)
-  );
-
-  useEffect(() => {
-    if (!user) return;
-    if (profile?.unifiedLinkingSettings) {
-      setUnifiedLinkingSettings(profile.unifiedLinkingSettings);
-      saveStoredUnifiedLinkingSettings(profile.unifiedLinkingSettings, user.uid);
-    } else {
-      const userSettings = getStoredUnifiedLinkingSettings(user.uid);
-      setUnifiedLinkingSettings(userSettings);
-    }
-  }, [user?.uid, profile?.unifiedLinkingSettings]);
-
-  const handleUnifiedLinkingSettingsChange = (newSettings: UnifiedLinkingSettings) => {
-    setUnifiedLinkingSettings(newSettings);
-    if (user) {
-      saveStoredUnifiedLinkingSettings(newSettings, user.uid);
-      updateProfileData({ unifiedLinkingSettings: newSettings }).catch(() => {});
-    }
-  };
-
+  // MetaScalp terminal settings state (isolated per user)
   const [isLinkingModalOpen, setIsLinkingModalOpen] = useState<boolean>(false);
   const [metaScalpToast, setMetaScalpToast] = useState<MetaScalpToastState | null>(null);
+  const [metaScalpSettings, setMetaScalpSettings] = useState<MetaScalpSettings>(() => {
+    return profile?.metaScalpSettings || getStoredMetaScalpSettings(user?.uid);
+  });
+
+  useEffect(() => {
+    if (profile?.metaScalpSettings) {
+      setMetaScalpSettings(profile.metaScalpSettings);
+    } else if (user?.uid) {
+      setMetaScalpSettings(getStoredMetaScalpSettings(user.uid));
+    }
+  }, [user?.uid, profile?.metaScalpSettings]);
+
+  const handleMetaScalpSettingsChange = (newSettings: MetaScalpSettings) => {
+    setMetaScalpSettings(newSettings);
+    if (user) {
+      saveStoredMetaScalpSettings(newSettings, user.uid);
+      updateProfileData({ metaScalpSettings: newSettings }).catch(() => {});
+    }
+  };
 
   // Telegram price alerts state
   const { activeAlertsCount } = useAlerts();
@@ -331,8 +329,9 @@ export default function App() {
         handleOpenAuthModal('signin', 'linking');
         return;
       }
+
       if (!metaScalpSettings.enabled) {
-        setIsMetaScalpModalOpen(true);
+        setIsLinkingModalOpen(true);
         return;
       }
 
@@ -350,7 +349,7 @@ export default function App() {
           title: 'MetaScalp Оновлено',
           ticker: res.ticker,
           binding: res.binding,
-          message: 'Стакан та графік синхронізовано',
+          message: res.message,
         });
       } else {
         setMetaScalpToast({
@@ -360,8 +359,8 @@ export default function App() {
           ticker: res.ticker,
           binding: res.binding,
           message: res.copiedToClipboard
-            ? 'Термінал не відповів. Тікер скопійовано в буфер (Ctrl+V)!'
-            : 'Термінал не знайдено на 127.0.0.1:17845.',
+            ? `${res.message} (Тікер скопійовано у буфер: Ctrl+V)`
+            : res.message,
         });
       }
     },
@@ -377,7 +376,10 @@ export default function App() {
       }
       setSelectedArchivedItem(null);
       setSelectedPair({ coin, formation: formation || coin.formations[0] });
-      if (metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick) {
+      const shouldAutoSwitch =
+        metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
+
+      if (shouldAutoSwitch) {
         handleSendToMetaScalp(coin);
       }
     },
@@ -420,7 +422,10 @@ export default function App() {
         formation: archived.formation,
       });
       setIsArchiveModalOpen(false);
-      if (metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick) {
+      const shouldAutoSwitch =
+        metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
+
+      if (shouldAutoSwitch) {
         handleSendToMetaScalp(matchingCoin);
       }
     },
@@ -527,9 +532,10 @@ export default function App() {
     if (!user) {
       setWatchlist((prev) => {
         const uniquePrev = Array.from(new Set(prev));
-        const next = uniquePrev.includes(symbol)
-          ? uniquePrev.filter((s) => s !== symbol)
-          : [...uniquePrev, symbol];
+        const isAdding = !uniquePrev.includes(symbol);
+        const next = isAdding
+          ? [...uniquePrev, symbol]
+          : uniquePrev.filter((s) => s !== symbol);
         const cleanNext = Array.from(new Set(next));
         try {
           localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify(cleanNext));
@@ -540,13 +546,43 @@ export default function App() {
     }
     setWatchlist((prev) => {
       const uniquePrev = Array.from(new Set(prev));
-      const next = uniquePrev.includes(symbol)
-        ? uniquePrev.filter((s) => s !== symbol)
-        : [...uniquePrev, symbol];
+      const isAdding = !uniquePrev.includes(symbol);
+      const next = isAdding
+        ? [...uniquePrev, symbol]
+        : uniquePrev.filter((s) => s !== symbol);
       const cleanNext = Array.from(new Set(next));
       try {
         localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(cleanNext));
       } catch (e) {}
+
+      setWatchlistFolders((prevFolders) => {
+        const entries = Object.entries(prevFolders);
+        if (entries.length === 0) return prevFolders;
+
+        const nextFolders: Record<string, string[]> = {};
+        if (isAdding) {
+          const alreadyAssigned = entries.some(([_, syms]) => Array.isArray(syms) && syms.includes(symbol));
+          entries.forEach(([name, syms], idx) => {
+            const list = Array.isArray(syms) ? [...syms] : [];
+            if (!alreadyAssigned && idx === 0) {
+              if (!list.includes(symbol)) list.push(symbol);
+            }
+            nextFolders[name] = list;
+          });
+        } else {
+          entries.forEach(([name, syms]) => {
+            nextFolders[name] = Array.isArray(syms) ? syms.filter((s) => s !== symbol) : [];
+          });
+        }
+
+        try {
+          localStorage.setItem(`crypto_screener_watchlist_folders_${user.uid}`, JSON.stringify(nextFolders));
+        } catch {}
+        updateProfileData({ watchlistFolders: nextFolders }).catch(() => {});
+
+        return nextFolders;
+      });
+
       updateProfileData({ watchlist: cleanNext }).catch(() => {});
       return cleanNext;
     });
@@ -702,7 +738,7 @@ export default function App() {
             handleOpenAuthModal('signin', 'linking');
             return;
           }
-          setIsMetaScalpModalOpen(true);
+          setIsLinkingModalOpen(true);
         }}
         metaScalpSettings={metaScalpSettings}
         onOpenTelegramAlerts={() => handleOpenTelegramAlerts()}
@@ -727,6 +763,11 @@ export default function App() {
             onOpenTelegramAlerts={handleOpenTelegramAlerts}
             onOpenFullscreenModal={(coin, formation) => handleSelectPair(coin, formation)}
             onReturnToPatterns={() => handlePageChange('screener')}
+          />
+        ) : activePage === 'replay' ? (
+          <ReplayPage
+            coins={coins}
+            onNavigateToScreener={() => handlePageChange('screener')}
           />
         ) : activePage === 'surveillance' ? (
           <SurveillancePage
@@ -988,8 +1029,8 @@ export default function App() {
 
       {/* MetaScalp Terminal Linking Modal */}
       <MetaScalpModal
-        isOpen={isMetaScalpModalOpen}
-        onClose={() => setIsMetaScalpModalOpen(false)}
+        isOpen={isLinkingModalOpen}
+        onClose={() => setIsLinkingModalOpen(false)}
         settings={metaScalpSettings}
         onSettingsChange={handleMetaScalpSettingsChange}
         currentSymbol={selectedPair?.coin.symbol || coins[0]?.symbol || 'BTCUSDT'}

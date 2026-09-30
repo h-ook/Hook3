@@ -234,17 +234,22 @@ export async function fetchDirectKlines(
   market: MarketType,
   symbol: string,
   timeframe: Timeframe,
-  limit: number = 70
+  limit: number = 70,
+  startTime?: number,
+  endTime?: number
 ): Promise<Kline[]> {
   const cleanSymbol = symbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
   const safeLimit = Math.min(Math.max(limit, 10), 1000);
-  const cacheKey = `${exchange}:${market}:${cleanSymbol}:${timeframe}:${safeLimit}`;
+  const cacheKey = `${exchange}:${market}:${cleanSymbol}:${timeframe}:${safeLimit}:${startTime || ''}:${endTime || ''}`;
 
   const cached = directKlinesCache.get(cacheKey);
   const now = Date.now();
   if (cached && now - cached.timestamp < CLIENT_CACHE_TTL_MS && cached.data.length > 0) {
     return cached.data;
   }
+
+  const extraBybit = `${startTime ? `&start=${startTime}` : ''}${endTime ? `&end=${endTime}` : ''}`;
+  const extraBinance = `${startTime ? `&startTime=${startTime}` : ''}${endTime ? `&endTime=${endTime}` : ''}`;
 
   if (exchange === 'bybit') {
     const interval = toBybitInterval(timeframe);
@@ -261,7 +266,7 @@ export async function fetchDirectKlines(
     for (const cat of categories) {
       for (const host of hosts) {
         try {
-          const url = `${host}/v5/market/kline?category=${cat}&symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`;
+          const url = `${host}/v5/market/kline?category=${cat}&symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBybit}`;
           const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
           if (!res.ok) continue;
           const json = await res.json();
@@ -294,15 +299,15 @@ export async function fetchDirectKlines(
   const interval = toBinanceInterval(timeframe);
   const mirrors = market === 'futures'
     ? [
-        `https://fapi.binance.com/fapi/v1/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
-        `https://data-api.binance.vision/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
-        `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
-        `https://api1.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
+        `https://fapi.binance.com/fapi/v1/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
+        `https://data-api.binance.vision/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
+        `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
+        `https://api1.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
       ]
     : [
-        `https://data-api.binance.vision/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
-        `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
-        `https://api1.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}`,
+        `https://data-api.binance.vision/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
+        `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
+        `https://api1.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${safeLimit}${extraBinance}`,
       ];
 
   for (const url of mirrors) {

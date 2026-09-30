@@ -135,7 +135,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     if (profile?.terminalSettings?.columns) {
       setConfig((prev) => ({
         ...prev,
-        columns: profile.terminalSettings?.columns || prev.columns,
+        columns: (profile.terminalSettings?.columns as 1 | 2 | 3 | 4) || prev.columns,
         blockHeight: (profile.terminalSettings?.blockHeight as any) || prev.blockHeight,
       }));
     }
@@ -799,7 +799,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               }`}
               title="1 Графік (на весь екран)"
             >
-              1x1
+              1x
             </button>
             <button
               onClick={() => {
@@ -865,19 +865,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Графік</span>
-          </button>
-
-          {/* Add Order Book (Стакан) Button */}
-          <button
-            onClick={() => {
-              setAddModalInitialMode('orderbook');
-              setIsAddModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-md shadow-emerald-900/30 transition-all active:scale-95 cursor-pointer"
-            title="Додати окремий блок біржового стакану (Scalper DOM / Лента)"
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Стакан</span>
           </button>
 
           {/* Telegram Alert shortcut */}

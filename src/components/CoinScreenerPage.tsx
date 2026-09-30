@@ -147,7 +147,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
-  const { coins: surveillanceCoins, addCoinToSurveillance, removeCoinFromSurveillance, isCoinMonitored } = useSurveillance();
+  const { coins: surveillanceCoins, addCoinToSurveillance, removeCoinFromSurveillance, isCoinMonitored, isCoinOnSurveillance } = useSurveillance();
   const [surveillanceToast, setSurveillanceToast] = useState<string | null>(null);
 
   const handleSurveillanceToggle = async (e: React.MouseEvent, coin: MarketCoin) => {
@@ -156,20 +156,20 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
       onOpenAuthModal?.('signin', 'general');
       return;
     }
-    const monitored = isCoinMonitored(coin.symbol, coin.exchange);
-    if (monitored) {
+    const onSurveillance = isCoinOnSurveillance(coin.symbol, coin.exchange);
+    if (onSurveillance) {
       const found = surveillanceCoins.find(
         (c) => c.symbol === coin.symbol && c.exchange === coin.exchange
       );
       if (found) {
         await removeCoinFromSurveillance(found.id);
-        setSurveillanceToast(`#${coin.symbol} видалено з системного нагляду`);
+        setSurveillanceToast(`#${coin.symbol} видалено зі системного нагляду`);
         setTimeout(() => setSurveillanceToast(null), 3000);
       }
     } else {
       const res = await addCoinToSurveillance(coin.symbol, coin.exchange, coin.marketType);
       if (res.success) {
-        setSurveillanceToast(`#${coin.symbol} додано на системний нагляд!`);
+        setSurveillanceToast(`Монету #${coin.symbol} додано на 24/7 системний нагляд!`);
         setTimeout(() => setSurveillanceToast(null), 3000);
       } else {
         setSurveillanceToast(res.error || `Не вдалося додати #${coin.symbol}`);
@@ -745,7 +745,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                 <option value="volume" className="bg-slate-900 text-white">Об'єм 24г</option>
                 <option value="priceChange" className="bg-slate-900 text-white">Зміна 24г (%)</option>
                 <option value="price" className="bg-slate-900 text-white">Ціна ($)</option>
-                <option value="volatility" className="bg-slate-900 text-white">Волатильність (5m)</option>
+                <option value="volatility" className="bg-slate-900 text-white">Волатильність</option>
                 <option value="distanceToHigh" className="bg-slate-900 text-white">Близькість до High</option>
                 <option value="distanceToLow" className="bg-slate-900 text-white">Близькість до Low</option>
               </select>
@@ -955,7 +955,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                 >
                   <div className="flex items-center justify-end gap-1.5">
                     <span>{t('volatility')}</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 font-bold tracking-wider">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 font-bold tracking-wider">
                       5m
                     </span>
                     {sortBy === 'volatility' && (sortOrder === 'desc' ? <ChevronDown className="w-3 h-3 text-cyan-400" /> : <ChevronUp className="w-3 h-3 text-cyan-400" />)}
@@ -1055,7 +1055,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
 
                           <div className="flex items-center gap-1 mt-0.5">
                             <span
-                              className={`text-[9px] px-1 py-0.2 rounded font-sans font-bold uppercase ${
+                              className={`text-[8px] px-1 py-0 rounded font-sans font-bold uppercase ${
                                 coin.exchange === 'binance'
                                   ? 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
                                   : 'bg-orange-950/80 text-orange-400 border border-orange-800/60'
@@ -1063,7 +1063,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                             >
                               {coin.exchange}
                             </span>
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-sans uppercase">
+                            <span className="text-[8px] px-1 py-0 rounded bg-slate-800 text-slate-400 font-sans uppercase">
                               {coin.marketType}
                             </span>
                           </div>
@@ -1111,16 +1111,16 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                             className={`p-1 rounded-lg transition-colors cursor-pointer relative ${
                               isGuest
                                 ? 'bg-slate-800/80 text-slate-400 hover:text-violet-300 hover:bg-slate-800'
-                                : isCoinMonitored(coin.symbol, coin.exchange)
+                                : isCoinOnSurveillance(coin.symbol, coin.exchange)
                                 ? 'bg-violet-500/25 text-violet-300 border border-violet-500/40'
                                 : 'bg-violet-500/10 hover:bg-violet-500/20 text-violet-300/70 hover:text-violet-200'
                             }`}
                             title={
                               isGuest
                                 ? 'Системний нагляд (тільки для зареєстрованих)'
-                                : isCoinMonitored(coin.symbol, coin.exchange)
-                                ? 'Монета на системному нагляді (Натисніть щоб зняти)'
-                                : 'Взяти монету на системний нагляд'
+                                : isCoinOnSurveillance(coin.symbol, coin.exchange)
+                                ? `Монета на системному нагляді (${isCoinMonitored(coin.symbol, coin.exchange) ? 'Активна 24/7' : 'Призупинена'}). Натисніть щоб зняти`
+                                : 'Взяти монету на 24/7 системний нагляд'
                             }
                           >
                             <Radar className={`w-3 h-3 ${!isGuest && isCoinMonitored(coin.symbol, coin.exchange) ? 'animate-pulse' : ''}`} />
@@ -1197,7 +1197,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                             >
                               {vol.toFixed(2)}%
                             </span>
-                            <span className="text-[9px] text-slate-500 font-sans">5m</span>
+                            <span className="text-[9px] text-slate-500 font-sans"></span>
                           </div>
                         );
                       })()}
@@ -1410,16 +1410,16 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                       className={`p-1.5 rounded-lg transition-colors cursor-pointer border relative ${
                         isGuest
                           ? 'bg-slate-800/80 text-slate-400 hover:text-violet-300 hover:bg-slate-800 border-slate-700/60'
-                          : isCoinMonitored(coin.symbol, coin.exchange)
+                          : isCoinOnSurveillance(coin.symbol, coin.exchange)
                           ? 'bg-violet-500/25 text-violet-300 border-violet-500/40'
                           : 'bg-violet-500/10 hover:bg-violet-500/20 border-violet-500/30 text-violet-300/70 hover:text-violet-200'
                       }`}
                       title={
                         isGuest
                           ? 'Системний нагляд (тільки для зареєстрованих)'
-                          : isCoinMonitored(coin.symbol, coin.exchange)
-                          ? 'Монета на системному нагляді (Натисніть щоб зняти)'
-                          : 'Взяти монету на системний нагляд'
+                          : isCoinOnSurveillance(coin.symbol, coin.exchange)
+                          ? `Монета на системному нагляді (${isCoinMonitored(coin.symbol, coin.exchange) ? 'Активна 24/7' : 'Призупинена'}). Натисніть щоб зняти`
+                          : 'Взяти монету на 24/7 системний нагляд'
                       }
                     >
                       <Radar className={`w-3.5 h-3.5 ${!isGuest && isCoinMonitored(coin.symbol, coin.exchange) ? 'animate-pulse' : ''}`} />
@@ -1429,16 +1429,6 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                         </span>
                       )}
                     </button>
-                    <a
-                      href={coin.exchangeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                      title="Біржа"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
                   </div>
                 </div>
               </div>

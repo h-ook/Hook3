@@ -5,6 +5,7 @@ export interface MetaScalpSettings {
   port: number;
   binding: string; // '001' - '500'
   autoSwitchOnClick: boolean;
+  soundFeedback?: boolean;
 }
 
 export const DEFAULT_METASCALP_SETTINGS: MetaScalpSettings = {
@@ -12,6 +13,7 @@ export const DEFAULT_METASCALP_SETTINGS: MetaScalpSettings = {
   port: 17845,
   binding: '001',
   autoSwitchOnClick: true,
+  soundFeedback: true,
 };
 
 const STORAGE_KEY = 'crypto_screener_metascalp_settings';
@@ -183,4 +185,23 @@ export async function sendTickerToMetaScalp(
     binding,
     copiedToClipboard: copied,
   };
+}
+
+export function playMetaScalpClickSound(): void {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  } catch (e) {
+    // Audio context may be blocked before user interaction
+  }
 }
