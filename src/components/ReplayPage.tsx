@@ -543,6 +543,11 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
     playSound,
   ]);
 
+  const handleStepForwardRef = useRef(handleStepForward);
+  useEffect(() => {
+    handleStepForwardRef.current = handleStepForward;
+  }, [handleStepForward]);
+
   // Auto-play Timer Loop
   useEffect(() => {
     if (!isPlaying) {
@@ -555,7 +560,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
 
     const intervalMs = Math.max(80, Math.round(600 / playbackSpeed));
     playbackTimerRef.current = setInterval(() => {
-      handleStepForward();
+      handleStepForwardRef.current();
     }, intervalMs);
 
     return () => {
@@ -564,7 +569,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
         playbackTimerRef.current = null;
       }
     };
-  }, [isPlaying, playbackSpeed, handleStepForward]);
+  }, [isPlaying, playbackSpeed]);
 
   // Global Keyboard Shortcuts (Space: Play/Pause, Right Arrow: Step +1)
   useEffect(() => {
@@ -817,11 +822,8 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-extrabold text-base sm:text-lg text-white font-mono tracking-tight">
-                Market Replay <span className="text-amber-400">• Торговий симулятор</span>
+                Market Replay
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                PRO
-              </span>
             </div>
             <p className="text-xs text-slate-400 leading-snug">
               Історія ринку відтворюється свічка за свічкою, а майбутні свічки надійно приховані. Приймайте рішення так, ніби ви зараз у минулому!

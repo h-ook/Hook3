@@ -31,9 +31,11 @@ import {
 import { TerminalChartWidget } from './terminal/TerminalChartWidget';
 import { AddChartModal } from './terminal/AddChartModal';
 import { TerminalSettingsDrawer } from './terminal/TerminalSettingsDrawer';
+import { RealtimeFuturesChart } from './chart/RealtimeFuturesChart';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
 import { useAuth } from '../context/AuthContext';
+import { toggleFullscreenSafe } from '../utils/fullscreenUtils';
 
 interface TerminalPageProps {
   coins: ScannedCoin[];
@@ -126,18 +128,38 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     return DEFAULT_CONFIG;
   });
 
-  // Sync profile terminalSettings changes
+  // Sync profile terminalSettings changes safely without triggering re-render loops
   useEffect(() => {
-    if (!user) return;
-    if (profile?.terminalSettings?.blocks && Array.isArray(profile.terminalSettings.blocks) && profile.terminalSettings.blocks.length > 0) {
-      setBlocks(profile.terminalSettings.blocks.map((b: any) => ({ ...b, mode: 'tradingview' as const })));
+    if (!user || !profile?.terminalSettings) return;
+    const settings = profile.terminalSettings;
+    if (settings.blocks && Array.isArray(settings.blocks) && settings.blocks.length > 0) {
+      setBlocks((currentBlocks) => {
+        const isSame =
+          currentBlocks.length === settings.blocks!.length &&
+          currentBlocks.every(
+            (b, i) =>
+              b.id === settings.blocks![i]?.id &&
+              b.symbol === settings.blocks![i]?.symbol &&
+              b.exchange === settings.blocks![i]?.exchange &&
+              b.timeframe === settings.blocks![i]?.timeframe
+          );
+        if (isSame) return currentBlocks;
+        return settings.blocks!.map((b: any) => ({ ...b, mode: 'tradingview' as const }));
+      });
     }
-    if (profile?.terminalSettings?.columns) {
-      setConfig((prev) => ({
-        ...prev,
-        columns: (profile.terminalSettings?.columns as 1 | 2 | 3 | 4) || prev.columns,
-        blockHeight: (profile.terminalSettings?.blockHeight as any) || prev.blockHeight,
-      }));
+    if (settings.columns) {
+      setConfig((prev) => {
+        const nextCols = (settings.columns as 1 | 2 | 3 | 4) || prev.columns;
+        const nextHeight = (settings.blockHeight as any) || prev.blockHeight;
+        if (prev.columns === nextCols && prev.blockHeight === nextHeight) {
+          return prev;
+        }
+        return {
+          ...prev,
+          columns: nextCols,
+          blockHeight: nextHeight,
+        };
+      });
     }
   }, [user?.uid, profile?.terminalSettings]);
 
@@ -217,35 +239,51 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     }
   }, [watchlist]);
 
-  // Save blocks to user-scoped storage and profile
+  // Save blocks and workspace config to user-scoped storage & Firestore
+  // Uses isFirstRender check, refs, and structural equality check to prevent infinite update loops
+  const isFirstRender = React.useRef(true);
+  const profileRef = React.useRef(profile);
+  profileRef.current = profile;
+  const updateProfileDataRef = React.useRef(updateProfileData);
+  updateProfileDataRef.current = updateProfileData;
+
   useEffect(() => {
-    if (!user) return;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    if (!user?.uid) return;
+
     try {
       localStorage.setItem(`${STORAGE_BLOCKS_KEY}_${user.uid}`, JSON.stringify(blocks));
-    } catch (e) {}
-    updateProfileData({
-      terminalSettings: {
-        columns: config.columns,
-        blockHeight: (config.blockHeight as any) || 'medium',
-        blocks: blocks,
-      },
-    }).catch(() => {});
-  }, [blocks, user?.uid]);
-
-  // Save config to user-scoped storage and profile
-  useEffect(() => {
-    if (!user) return;
-    try {
       localStorage.setItem(`${STORAGE_CONFIG_KEY}_${user.uid}`, JSON.stringify(config));
     } catch (e) {}
-    updateProfileData({
-      terminalSettings: {
-        columns: config.columns,
-        blockHeight: (config.blockHeight as any) || 'medium',
-        blocks: blocks,
-      },
-    }).catch(() => {});
-  }, [config, user?.uid]);
+
+    // Check if the current state is already identical to what's in profile
+    const existing = profileRef.current?.terminalSettings;
+    const isSameCols = existing?.columns === config.columns;
+    const isSameHeight = existing?.blockHeight === config.blockHeight;
+    const isSameBlocks =
+      existing?.blocks &&
+      existing.blocks.length === blocks.length &&
+      existing.blocks.every((b: any, i: number) => b.id === blocks[i]?.id && b.symbol === blocks[i]?.symbol);
+
+    if (isSameCols && isSameHeight && isSameBlocks) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      updateProfileDataRef.current({
+        terminalSettings: {
+          columns: config.columns,
+          blockHeight: (config.blockHeight as any) || 'medium',
+          blocks: blocks,
+        },
+      }).catch(() => {});
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [blocks, config, user?.uid]);
 
   // Browser fullscreen change listener
   useEffect(() => {
@@ -273,11 +311,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   }, [isFavoritesDrawerOpen, onReturnToPatterns]);
 
   const toggleBrowserFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
+    toggleFullscreenSafe();
   };
 
   const handleToggleDrawingToolbar = useCallback(() => {
@@ -362,61 +396,27 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     }
   };
 
-  // Build TradingView Embed URL
-  const tradingViewUrl = useMemo(() => {
-    const cleanSymbol = activeCoin.symbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const isBybit = activeCoin.exchange === 'bybit';
-    const isFutures = activeCoin.marketType === 'futures';
-
-    const tvPrefix = isBybit ? 'BYBIT' : 'BINANCE';
-    const tvSymbol = isFutures ? `${tvPrefix}:${cleanSymbol}.P` : `${tvPrefix}:${cleanSymbol}`;
-
-    let interval = '15';
-    switch (timeframe) {
-      case '1m': interval = '1'; break;
-      case '5m': interval = '5'; break;
-      case '15m': interval = '15'; break;
-      case '1h': interval = '60'; break;
-      case '4h': interval = '240'; break;
-      case '1d': interval = 'D'; break;
-      default: interval = '15';
-    }
-
-    const params = new URLSearchParams({
-      symbol: tvSymbol,
-      interval: interval,
-      theme: 'dark',
-      style: '1',
-      timezone: 'exchange',
-      withdateranges: '0',
-      hide_top_toolbar: '1',
-      hide_side_toolbar: '0',
-      allow_symbol_change: '0',
-      save_image: '0',
-      hide_legend: '1',
-      locale: 'uk',
-      toolbar_bg: '#090d16',
-      gridColor: 'rgba(0,0,0,0)',
-      gridTransparency: '100',
-    });
-
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, timeframe]);
-
   // Block management
   const handleAddChart = (
-    coin: ScannedCoin,
+    coin: any,
     tf: Timeframe,
     mode: TerminalBlockMode,
     formationId?: string
   ) => {
+    const rawSymbol = (coin.symbol || 'BTCUSDT').toUpperCase().replace('/', '').trim();
+    const symbol = rawSymbol.endsWith('USDT') ? rawSymbol : `${rawSymbol}USDT`;
+    const base = coin.baseAsset || symbol.replace(/(USDT|BUSD|USDC)$/, '') || symbol;
+    const quote = coin.quoteAsset || 'USDT';
+    const exchange = coin.exchange || 'binance';
+    const marketType = coin.marketType || 'futures';
+
     const newBlock: TerminalChartBlock = {
-      id: `block-${coin.symbol}-${Date.now()}`,
-      symbol: coin.symbol,
-      baseAsset: coin.baseAsset,
-      quoteAsset: coin.quoteAsset,
-      exchange: coin.exchange,
-      marketType: coin.marketType,
+      id: `block-${symbol}-${Date.now()}`,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      exchange,
+      marketType,
       timeframe: tf || config.globalTimeframe || '15m',
       mode: mode || 'tradingview',
       formationId,
@@ -860,11 +860,11 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               setAddModalInitialMode('tradingview');
               setIsAddModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-cyan-900/30 transition-all active:scale-95 cursor-pointer"
-            title="Додати новий блок з графіком монети"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 via-cyan-500 to-blue-500 hover:from-cyan-500 hover:to-blue-400 text-white font-bold text-xs shadow-md shadow-cyan-950/50 hover:shadow-cyan-500/25 border border-cyan-400/40 transition-all active:scale-95 cursor-pointer"
+            title="Додати новий графік монети (понад 2,400+ монет на біржі від $50k до $10B)"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Графік</span>
+            <Plus className="w-4 h-4" />
+            <span className="font-bold">+ Додати графік</span>
           </button>
 
           {/* Telegram Alert shortcut */}
@@ -1004,6 +1004,21 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             </div>
           </div>
 
+          {/* Quick Add Chart button in Drawer */}
+          <div className="p-2 border-b border-slate-800/60 bg-slate-900/40">
+            <button
+              onClick={() => {
+                setAddModalInitialMode('tradingview');
+                setIsAddModalOpen(true);
+              }}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+              title="Додати графік будь-якої монети з біржі"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Додати графік у термінал</span>
+            </button>
+          </div>
+
           {/* Coins List in Drawer */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5 touch-scroll">
             {filteredFavorites.length === 0 ? (
@@ -1084,104 +1099,121 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
         {/* Workspace Display: If 1 block or maximized block, show full single chart. If multiple blocks, show multi-chart grid */}
         {blocks.length <= 1 ? (
-          /* Single Screen 100% View TradingView Pro */
-          <div className="w-full h-full relative overflow-hidden">
-            {iframeLoading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400 gap-3 z-10 pointer-events-none">
-                <RefreshCw className="w-8 h-8 animate-spin text-cyan-400" />
-                <span className="text-sm font-medium">Завантаження графіку {activeCoin.symbol}...</span>
-              </div>
-            )}
-            <div
-              className={`absolute top-0 h-full transition-[width,left] duration-200 ease-in-out ${
-                showDrawingToolbar ? 'left-0 w-full' : '-left-[54px] w-[calc(100%+54px)]'
-              }`}
-            >
-              <iframe
-                key={tradingViewUrl}
-                src={tradingViewUrl}
-                className="h-full w-full border-0"
-                title={`TradingView Chart ${activeCoin.symbol}`}
-                onLoad={() => setIframeLoading(false)}
-                allow="fullscreen"
-                loading="lazy"
-              />
-            </div>
-            <div
-              className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-[54px] bg-transparent transition-transform duration-200 ${
-                showDrawingToolbar ? '-translate-x-full' : 'translate-x-0'
-              }`}
-              aria-hidden={showDrawingToolbar}
+          /* Single Screen 100% View Realtime Futures Terminal */
+          <div className="w-full h-full relative overflow-hidden p-1 sm:p-2">
+            <RealtimeFuturesChart
+              initialSymbol={activeCoin.symbol}
+              initialExchange={activeCoin.exchange}
+              initialTimeframe={timeframe}
+              height="100%"
+              isFullscreen={false}
+              onSymbolChange={(newSym) => {
+                const matched = coins.find((c) => c.symbol.toUpperCase() === newSym.toUpperCase());
+                if (matched) setActiveCoin(matched);
+              }}
             />
-            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleToggleDrawingToolbar}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/85 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-cyan-300 shadow-md backdrop-blur-sm transition-all cursor-pointer group"
-                title={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
-                aria-label={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
-              >
-                {showDrawingToolbar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-              </button>
-            </div>
           </div>
         ) : (
           /* Multi-chart Grid Layout */
           <div className="w-full h-full p-2 sm:p-3 overflow-y-auto no-scrollbar">
-            <div className={`grid ${gridColsClass} gap-2 sm:gap-3 transition-all duration-200`}>
-              {blocks.map((block, index) => {
-                const coinData = getCoinForBlock(block);
-                const isMaximized = maximizedBlockId === block.id;
+            {blocks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 sm:p-16 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 my-8 max-w-lg mx-auto">
+                <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-4 shadow-inner">
+                  <Plus className="w-7 h-7" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-1">Робоча область порожня</h3>
+                <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+                  Додайте графік будь-якої монети з біржі Binance або Bybit. Доступно понад 2,400+ монет від $50k до $10B.
+                </p>
+                <button
+                  onClick={() => {
+                    setAddModalInitialMode('tradingview');
+                    setIsAddModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-cyan-950/50 transition-all active:scale-95 cursor-pointer border border-cyan-400/30"
+                >
+                  <Plus className="w-4 h-4" />
+                  + Додати перший графік
+                </button>
+              </div>
+            ) : (
+              <div className={`grid ${gridColsClass} gap-2 sm:gap-3 transition-all duration-200`}>
+                {blocks.map((block, index) => {
+                  const coinData = getCoinForBlock(block);
+                  const isMaximized = maximizedBlockId === block.id;
 
-                return (
-                  <TerminalChartWidget
-                    key={block.id}
-                    block={block}
-                    coin={coinData}
-                    allCoins={coins}
-                    isSingleBlock={blocks.length === 1}
-                    isMaximized={isMaximized}
-                    onToggleMaximize={() =>
-                      setMaximizedBlockId((prev) => (prev === block.id ? null : block.id))
-                    }
-                    onRemove={() => handleRemoveBlock(block.id)}
-                    onUpdateBlock={(updated) => handleUpdateBlock(block.id, updated)}
-                    onOpenFullscreenModal={onOpenFullscreenModal}
-                    onSendMetaScalp={onSendMetaScalp}
-                    metaScalpBinding={metaScalpBinding}
-                    onOpenTelegramAlerts={onOpenTelegramAlerts}
-                    onMove={(dir) => handleMoveBlock(index, dir)}
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      if (draggedBlockIndex !== null && draggedBlockIndex !== index) {
-                        setDragOverBlockIndex(index);
+                  return (
+                    <TerminalChartWidget
+                      key={block.id}
+                      block={block}
+                      coin={coinData}
+                      allCoins={coins}
+                      isSingleBlock={blocks.length === 1}
+                      isMaximized={isMaximized}
+                      onToggleMaximize={() =>
+                        setMaximizedBlockId((prev) => (prev === block.id ? null : block.id))
                       }
-                    }}
-                    onDragLeave={() => {
-                      if (dragOverBlockIndex === index) {
-                        setDragOverBlockIndex(null);
+                      onRemove={() => handleRemoveBlock(block.id)}
+                      onUpdateBlock={(updated) => handleUpdateBlock(block.id, updated)}
+                      onOpenFullscreenModal={onOpenFullscreenModal}
+                      onSendMetaScalp={onSendMetaScalp}
+                      metaScalpBinding={metaScalpBinding}
+                      onOpenTelegramAlerts={onOpenTelegramAlerts}
+                      onMove={(dir) => handleMoveBlock(index, dir)}
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (draggedBlockIndex !== null && draggedBlockIndex !== index) {
+                          setDragOverBlockIndex(index);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverBlockIndex === index) {
+                          setDragOverBlockIndex(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        handleDrop(index);
+                      }}
+                      isDragOverMerge={dragOverBlockIndex === index && draggedBlockIndex !== null && draggedBlockIndex !== index}
+                      canMerge={
+                        draggedBlockIndex !== null &&
+                        draggedBlockIndex !== index &&
+                        ((blocks[draggedBlockIndex]?.mode === 'orderbook' && block.mode === 'tradingview') ||
+                          (blocks[draggedBlockIndex]?.mode === 'tradingview' && block.mode === 'orderbook') ||
+                          blocks[draggedBlockIndex]?.mode === 'orderbook' ||
+                          block.mode === 'orderbook')
                       }
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      handleDrop(index);
-                    }}
-                    isDragOverMerge={dragOverBlockIndex === index && draggedBlockIndex !== null && draggedBlockIndex !== index}
-                    canMerge={
-                      draggedBlockIndex !== null &&
-                      draggedBlockIndex !== index &&
-                      ((blocks[draggedBlockIndex]?.mode === 'orderbook' && block.mode === 'tradingview') ||
-                        (blocks[draggedBlockIndex]?.mode === 'tradingview' && block.mode === 'orderbook') ||
-                        blocks[draggedBlockIndex]?.mode === 'orderbook' ||
-                        block.mode === 'orderbook')
-                    }
-                    onSplitBlock={() => handleSplitBlock(block.id)}
-                    heightStyle={computedHeightStyle}
-                  />
-                );
-              })}
-            </div>
+                      onSplitBlock={() => handleSplitBlock(block.id)}
+                      heightStyle={computedHeightStyle}
+                    />
+                  );
+                })}
+
+                {/* "+ Додати графік" Tile Card at the end of grid */}
+                <div
+                  onClick={() => {
+                    setAddModalInitialMode('tradingview');
+                    setIsAddModalOpen(true);
+                  }}
+                  className="flex flex-col items-center justify-center gap-2.5 p-6 rounded-xl border border-dashed border-slate-800 hover:border-cyan-500/50 bg-slate-950/25 hover:bg-cyan-950/15 transition-all cursor-pointer group text-slate-500 hover:text-cyan-400 min-h-[320px] select-none"
+                  title="Додати ще один графік монети у термінал"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-slate-900 group-hover:bg-cyan-500/20 border border-slate-800 group-hover:border-cyan-500/40 flex items-center justify-center text-slate-400 group-hover:text-cyan-300 transition-colors shadow-sm">
+                    <Plus className="w-6 h-6" />
+                  </div>
+                  <div className="text-center">
+                    <span className="text-sm font-bold text-slate-300 group-hover:text-white transition-colors block">
+                      + Додати графік
+                    </span>
+                    <span className="text-[11px] text-slate-500 group-hover:text-slate-300 transition-colors block mt-0.5">
+                      2,400+ монет на біржі ($50k - $10B)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

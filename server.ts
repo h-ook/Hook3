@@ -41,6 +41,8 @@ import {
 } from './server/surveillanceService';
 import { ExchangeId, MarketType, Timeframe } from './src/types';
 import { cronManager } from './server/cronService';
+import { surveillanceManager } from './server/surveillance/surveillanceManager';
+import { surveillanceReplayEngine } from './server/surveillance/replayEngine';
 
 async function startServer() {
   const app = express();
@@ -180,7 +182,7 @@ async function startServer() {
     try {
       const exchange = (req.query.exchange as 'all' | ExchangeId) || 'all';
       const marketType = (req.query.marketType as 'all' | MarketType) || 'all';
-      const minVolumeUsd = req.query.minVolume !== undefined ? parseFloat(req.query.minVolume as string) : 100_000;
+      const minVolumeUsd = req.query.minVolume !== undefined ? parseFloat(req.query.minVolume as string) : 50_000;
       const maxVolumeUsd = req.query.maxVolume !== undefined ? parseFloat(req.query.maxVolume as string) : 10_000_000_000;
 
       const coins = await fetchMarketCoins({
@@ -245,7 +247,7 @@ async function startServer() {
       const rawSymbol = (req.query.symbol as string) || 'BTCUSDT';
       const symbol = rawSymbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const timeframe = (req.query.timeframe as Timeframe) || '1h';
-      const limit = req.query.limit ? Math.min(Math.max(parseInt(req.query.limit as string, 10) || 500, 10), 1000) : 500;
+      const limit = req.query.limit ? Math.min(Math.max(parseInt(req.query.limit as string, 10) || 500, 10), 1500) : 500;
       const startTime = req.query.startTime ? parseInt(req.query.startTime as string, 10) : undefined;
       const endTime = req.query.endTime ? parseInt(req.query.endTime as string, 10) : undefined;
 
@@ -779,6 +781,251 @@ async function startServer() {
       saveSurveillanceList(found.userId, found.list);
 
       res.json({ success: true, coin: updated });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Granular live worker snapshot (orderbook, trade flow, densities, setups, OI)
+  app.get('/api/surveillance/worker/:id', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      if (!snapshot) {
+        return res.status(404).json({ success: false, error: 'Worker not found or not active' });
+      }
+      res.json({ success: true, data: snapshot });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Health endpoint for Surveillance system (#91)
+  app.get('/api/surveillance/health', (req, res) => {
+    try {
+      const metrics = surveillanceManager.getHealthMetrics();
+      res.json({ success: true, data: metrics });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Individual coin surveillance snapshot (#72, #92)
+  app.get('/api/surveillance/:id/snapshot', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      if (snapshot) {
+        return res.json({ success: true, data: snapshot });
+      }
+      const found = findSurveillanceCoinById(id);
+      if (found) {
+        return res.json({ success: true, data: found.coin });
+      }
+      res.status(404).json({ success: false, error: 'Монету не знайдено' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin events (#72)
+  app.get('/api/surveillance/:id/events', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      if (snapshot) {
+        return res.json({ success: true, data: snapshot.recentEvents });
+      }
+      const found = findSurveillanceCoinById(id);
+      const events = found?.coin.state?.recentEvents || [];
+      res.json({ success: true, data: events });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin setups (#72)
+  app.get('/api/surveillance/:id/setup', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      res.json({ success: true, data: snapshot ? snapshot.setups : [] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin levels (#72)
+  app.get('/api/surveillance/:id/levels', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      res.json({
+        success: true,
+        data: {
+          levelZones: snapshot?.levelZones || [],
+          thirdTouches: snapshot?.thirdTouches || [],
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin densities (#72)
+  app.get('/api/surveillance/:id/densities', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      res.json({ success: true, data: snapshot?.densities || [] });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin structure (#72)
+  app.get('/api/surveillance/:id/structure', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      res.json({ success: true, data: snapshot?.structures || {} });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin OI (#72)
+  app.get('/api/surveillance/:id/oi', (req, res) => {
+    try {
+      const { id } = req.params;
+      const snapshot = surveillanceManager.getWorkerSnapshot(id);
+      res.json({ success: true, data: snapshot?.oiSnapshot || null });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Specific coin chart candles (#72)
+  app.get('/api/surveillance/:id/chart', (req, res) => {
+    try {
+      const { id } = req.params;
+      const tf = (req.query.timeframe as any) || '15m';
+      const worker = surveillanceManager.getWorker(id);
+      const candles = worker ? worker.mtfEngine.getCandles(tf) : [];
+      res.json({ success: true, data: candles });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Trigger worker resync (#72)
+  app.post('/api/surveillance/:id/resync', (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = surveillanceManager.resyncWorker(id);
+      res.json({ success, message: success ? 'Resync initiated' : 'Worker not found' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Test Alert (#72)
+  app.post('/api/surveillance/:id/test-alert', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const found = findSurveillanceCoinById(id);
+      if (!found) {
+        return res.status(404).json({ success: false, error: 'Монету не знайдено' });
+      }
+
+      const worker = surveillanceManager.getWorker(id);
+      const curPrice = worker ? worker.currentPrice : found.coin.state?.currentPrice || 100;
+
+      const testMsg =
+        `🧪 <b>ТЕСТОВИЙ АЛЕРТ НАГЛЯДУ (Surveillance 2.0)</b>\n\n` +
+        `<b>${found.coin.symbol}</b> (${found.coin.exchange.toUpperCase()})\n` +
+        `Ціна: <b>$${curPrice}</b>\n` +
+        `Статус воркера: <b>${worker ? worker.streamClient.status : 'Offline'}</b>\n` +
+        `Здоров'я даних: <b>${worker ? worker.streamClient.getDataHealth().status : 'UNKNOWN'}</b>\n\n` +
+        `<i>Система моніторингу активна 24/7.</i>`;
+
+      await surveillanceManager.alertManager.dispatchAlert(found.userId, testMsg);
+      res.json({ success: true, message: 'Тестовий алерт надіслано в Telegram' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // SSE Live stream for dashboard (#73)
+  app.get('/api/surveillance/live', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const uid = (req.query.userId as string) || 'guest';
+
+    const sendUpdate = () => {
+      try {
+        const snapshots = surveillanceManager.getAllSnapshots(uid);
+        res.write(`data: ${JSON.stringify({ type: 'SNAPSHOT_BATCH', data: snapshots })}\n\n`);
+      } catch (e) {}
+    };
+
+    // Send initial snapshot
+    sendUpdate();
+
+    // Stream every 3 seconds
+    const interval = setInterval(sendUpdate, 3000);
+
+    req.on('close', () => {
+      clearInterval(interval);
+    });
+  });
+
+  // Causal historical replay / backtest without look-ahead bias
+  app.post('/api/surveillance/backtest', async (req, res) => {
+    try {
+      const { symbol, exchange, marketType, timeframe } = req.body;
+      const sym = (symbol || 'BTCUSDT').toUpperCase().trim();
+      const ex = exchange || 'binance';
+      const mkt = marketType || 'futures';
+      const tf = timeframe || '15m';
+
+      const klines = await fetchKlines(ex, mkt, sym, tf, 200).catch(() => []);
+      const result = surveillanceReplayEngine.runCausalBacktest(sym, klines, tf);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Get aggregated surveillance events across all tracked coins for user
+  app.get('/api/surveillance/events', (req, res) => {
+    try {
+      const { userId } = req.query;
+      const uid = typeof userId === 'string' && userId.trim() ? userId.trim() : 'guest';
+      const coins = loadSurveillanceList(uid);
+      const allEvents: any[] = [];
+
+      for (const coin of coins) {
+        if (coin.state?.recentEvents && Array.isArray(coin.state.recentEvents)) {
+          for (const ev of coin.state.recentEvents) {
+            allEvents.push({
+              ...ev,
+              coinId: coin.id,
+              symbol: coin.symbol,
+              baseAsset: coin.baseAsset,
+              quoteAsset: coin.quoteAsset,
+              exchange: coin.exchange,
+              marketType: coin.marketType,
+            });
+          }
+        }
+      }
+
+      allEvents.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      res.json({ success: true, data: allEvents });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

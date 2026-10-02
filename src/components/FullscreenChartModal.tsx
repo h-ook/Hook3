@@ -21,7 +21,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Kline, DetectedFormation, Timeframe, ExchangeId, MarketType, ChartMarkerInfo, ChartRestoreParams, ScannedCoin } from '../types';
-import { TradingViewChart } from './TradingViewChart';
+import { RealtimeFuturesChart } from './chart/RealtimeFuturesChart';
 import { formatCryptoPrice } from '../utils/formatters';
 import { fetchDirectKlines } from '../utils/directExchangeClient';
 
@@ -275,65 +275,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   const handleTimeframeSelect = (tf: Timeframe) => {
     setTimeframe(tf);
     onTimeframeChange?.(tf);
-    setIframeLoading(true);
   };
-
-  // Build TradingView Embed URL
-  const tradingViewUrl = useMemo(() => {
-    const cleanSymbol = activeCoin.symbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const isBybit = activeCoin.exchange === 'bybit';
-    const isFutures = activeCoin.marketType === 'futures';
-
-    let tvPrefix = isBybit ? 'BYBIT' : 'BINANCE';
-    // Binance and Bybit futures symbol formatting for TradingView
-    let tvSymbol = isFutures ? `${tvPrefix}:${cleanSymbol}.P` : `${tvPrefix}:${cleanSymbol}`;
-
-    // Map interval
-    let interval = '15';
-    switch (timeframe) {
-      case '1m':
-        interval = '1';
-        break;
-      case '5m':
-        interval = '5';
-        break;
-      case '15m':
-        interval = '15';
-        break;
-      case '1h':
-        interval = '60';
-        break;
-      case '4h':
-        interval = '240';
-        break;
-      case '1d':
-        interval = 'D';
-        break;
-      default:
-        interval = '15';
-    }
-
-    const params = new URLSearchParams({
-      symbol: tvSymbol,
-      interval: interval,
-      theme: 'dark',
-      style: '1', // candlesticks
-      timezone: 'exchange',
-      withdateranges: '0', // Прибрано панель знизу (date ranges bar)
-      hide_top_toolbar: '1', // Прибрано верхню панель TradingView
-      hide_side_toolbar: '0', // Панель TradingView керується локальним overlay без перезавантаження iframe
-      allow_symbol_change: '0', // Прибрано вибір та назву символу з панелі
-      save_image: '0',
-      hide_legend: '1', // Прибрано назву монети, біржі та легенду з самого графіку
-      locale: 'uk',
-      toolbar_bg: '#090d16',
-      gridColor: 'rgba(0,0,0,0)',
-      gridTransparency: '100',
-    });
-    // NOTE: details, hotlist, calendar, news, watchlist are explicitly OMITTED to ensure NO right-hand panel or hotlists appear!
-
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, timeframe]);
 
   if (!isOpen) return null;
 
@@ -685,65 +627,21 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
         </div>
 
        
-        {/* Chart View */}
-        {activeMode === 'tradingview' ? (
-          <div className="w-full h-full relative overflow-hidden">
-            {iframeLoading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400 gap-3 z-10 pointer-events-none">
-                <RefreshCw className="w-8 h-8 animate-spin text-cyan-400" />
-                <span className="text-sm font-medium">Завантаження графіку {activeCoin.symbol}...</span>
-              </div>
-            )}
-            <div
-              className={`absolute top-0 h-full transition-[width,left] duration-200 ease-in-out ${
-                showDrawingToolbar ? 'left-0 w-full' : '-left-[54px] w-[calc(100%+54px)]'
-              }`}
-            >
-              <iframe
-                key={tradingViewUrl}
-                src={tradingViewUrl}
-                className="h-full w-full border-0"
-                title={`TradingView Chart ${activeCoin.symbol}`}
-                onLoad={() => setIframeLoading(false)}
-                allow="fullscreen"
-                loading="lazy"
-              />
-            </div>
-            <div
-              className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-[54px] bg-transparent transition-transform duration-200 ${
-                showDrawingToolbar ? '-translate-x-full' : 'translate-x-0'
-              }`}
-              aria-hidden={showDrawingToolbar}
-            />
-            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleToggleDrawingToolbar}
-                className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-slate-300 transition-colors hover:bg-slate-800/60 hover:text-cyan-300"
-                title={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
-                aria-label={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
-              >
-                {showDrawingToolbar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="w-full h-full flex flex-col p-2 sm:p-4 overflow-y-auto">
-            <TradingViewChart
-              klines={activeKlines}
-              formation={formation}
-              symbol={activeCoin.symbol}
-              timeframe={timeframe}
-              exchange={activeCoin.exchange}
-              marketType={activeCoin.marketType}
-              historyLimit={1000}
-              onAddToArchive={onAddToArchive}
-              isArchived={isArchived}
-              customMarkers={customMarkers}
-              savedChartParams={savedChartParams}
-            />
-          </div>
-        )}
+        {/* Realtime Futures Chart View (lightweight-charts) */}
+        <div className="w-full h-full flex flex-col p-1 sm:p-2 overflow-hidden">
+          <RealtimeFuturesChart
+            initialSymbol={activeCoin.symbol}
+            initialExchange={activeCoin.exchange}
+            initialTimeframe={timeframe as Timeframe}
+            height="100%"
+            isFullscreen={true}
+            onCloseFullscreen={onClose}
+            onSymbolChange={(newSym) => {
+              const matched = allCoins?.find(c => c.symbol.toUpperCase() === newSym.toUpperCase());
+              if (matched) setActiveCoin(matched);
+            }}
+          />
+        </div>
       </main>
     </div>
   );

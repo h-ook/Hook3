@@ -28,38 +28,322 @@
         ]
       },
       "state": {
-        "currentPrice": 84215.9,
-        "change24h": 0.71,
+        "currentPrice": 86506.2,
+        "change24h": 1.98,
         "high1d": 87385.1,
-        "low1d": 62268.2,
-        "swingHigh4h": 84554.9,
-        "swingLow4h": 82851.5,
-        "localHigh1h": 85632.7,
-        "localLow1h": 82901.3,
-        "localHigh15m": 85632.7,
-        "localLow15m": 83325.1,
-        "rangePositionPct": 76.5,
-        "resistance4h": 84350,
-        "support4h": 83778.4,
-        "nextZoneUp": 84635.8,
-        "nextZoneDown": 83492.59999999999,
-        "fib618": 83502.1988,
-        "fib786": 83216.0276,
+        "low1d": 62484.2,
+        "swingHigh4h": 85632.7,
+        "swingLow4h": 83136.6,
+        "localHigh1h": 87249.6,
+        "localLow1h": 84472.5,
+        "localHigh15m": 87249.6,
+        "localLow15m": 86187.3,
+        "rangePositionPct": 65.8,
+        "resistance4h": 87247.3,
+        "support4h": 85080,
+        "nextZoneUp": 88330.95000000001,
+        "nextZoneDown": 83996.35,
+        "fib618": 84090.1102,
+        "fib786": 83670.7654,
         "structureTrend": "bullish",
-        "channelUpper": 85632.7,
-        "channelLower": 82901.3,
-        "momentumRecentPct": 0.55,
-        "lastCalculated": 1790783672136,
+        "channelUpper": 87249.6,
+        "channelLower": 84454.3,
+        "momentumRecentPct": -0.05,
+        "lastCalculated": 1790950718323,
         "lastEvent": {
-          "id": "structure_change_1790783672136",
-          "type": "structure",
-          "title": "🔄 Зміна структури ринку (BULLISH)",
-          "description": "Структура змінила тренд на bullish.",
-          "price": 84215.9,
-          "timestamp": 1790783672136,
-          "severity": "critical"
+          "id": "level_cross_down_15m_1790950585230",
+          "type": "level",
+          "title": "⚠️ Пробій 15m рівня (Crossing Down $86,235.36)",
+          "description": "Пробито локальний 15m рівень підтримки вниз.",
+          "price": 86217.6,
+          "timestamp": 1790950585230,
+          "severity": "info"
         },
         "recentEvents": [
+          {
+            "id": "level_cross_down_15m_1790950585230",
+            "type": "level",
+            "title": "⚠️ Пробій 15m рівня (Crossing Down $86,235.36)",
+            "description": "Пробито локальний 15m рівень підтримки вниз.",
+            "price": 86217.6,
+            "timestamp": 1790950585230,
+            "severity": "info"
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_4h_RESISTANCE_86699.9",
+            "type": "risk",
+            "title": "Третій тест рівня $86752.25",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.187%. Компресія: ТАК",
+            "price": 86590.4,
+            "timestamp": 1790949543994,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_4h_RESISTANCE_86699.9",
+                "levelType": "RESISTANCE",
+                "price": 86752.25,
+                "touchCount": 3,
+                "state": "ACTIVE",
+                "distancePct": 0.187,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790950674167
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_1d_RESISTANCE_87385.1",
+            "type": "risk",
+            "title": "Третій тест рівня $87385.1",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.909%. Компресія: ТАК",
+            "price": 86590.4,
+            "timestamp": 1790949543994,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_1d_RESISTANCE_87385.1",
+                "levelType": "RESISTANCE",
+                "price": 87385.1,
+                "touchCount": 3,
+                "state": "APPROACHING",
+                "distancePct": 0.909,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790950674167
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_4h_CHoCH_1790942400",
+            "type": "structure",
+            "title": "CHoCH на 4H",
+            "description": "Пробій структури BULLISH на рівні $86576",
+            "price": 86590.4,
+            "timestamp": 1790949543991,
+            "severity": "warning",
+            "details": {
+              "timeframe": "4h",
+              "confluenceScore": 75,
+              "type": "CHoCH",
+              "evidence": {
+                "timeframe": "4h",
+                "trend": "TRANSITION",
+                "score": 75,
+                "recentSwings": [
+                  {
+                    "index": 81,
+                    "time": 1790683200,
+                    "price": 84554.9,
+                    "type": "HIGH",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 82,
+                    "time": 1790697600,
+                    "price": 82851.5,
+                    "type": "LOW",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 85,
+                    "time": 1790740800,
+                    "price": 82901.3,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 87,
+                    "time": 1790769600,
+                    "price": 85632.7,
+                    "type": "HIGH",
+                    "classification": "STRUCTURAL_SWING"
+                  },
+                  {
+                    "index": 91,
+                    "time": 1790827200,
+                    "price": 84379.8,
+                    "type": "HIGH",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 92,
+                    "time": 1790841600,
+                    "price": 83136.6,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  }
+                ],
+                "lastBreak": {
+                  "type": "CHoCH",
+                  "direction": "BULLISH",
+                  "price": 86576,
+                  "brokenSwingPrice": 84379.8,
+                  "time": 1790942400,
+                  "timeframe": "4h",
+                  "confirmed": true,
+                  "volumeConfirmed": true
+                },
+                "higherHighsCount": 8,
+                "lowerHighsCount": 6,
+                "higherLowsCount": 9,
+                "lowerLowsCount": 3
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_4h_RESISTANCE_86700",
+            "type": "risk",
+            "title": "Третій тест рівня $86696.831875",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.078%. Компресія: ТАК",
+            "price": 86764.6,
+            "timestamp": 1790949025383,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_4h_RESISTANCE_86700",
+                "levelType": "RESISTANCE",
+                "price": 86696.831875,
+                "touchCount": 2,
+                "state": "ACTIVE",
+                "distancePct": 0.078,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790949025381
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_1d_RESISTANCE_87385",
+            "type": "risk",
+            "title": "Третій тест рівня $87385.1",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.71%. Компресія: ТАК",
+            "price": 86764.6,
+            "timestamp": 1790949025382,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_1d_RESISTANCE_87385",
+                "levelType": "RESISTANCE",
+                "price": 87385.1,
+                "touchCount": 3,
+                "state": "APPROACHING",
+                "distancePct": 0.71,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790949025381
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_1h_CHoCH_1790946000",
+            "type": "structure",
+            "title": "CHoCH на 1H",
+            "description": "Пробій структури BULLISH на рівні $86778.4",
+            "price": 86764.6,
+            "timestamp": 1790949025379,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 75,
+              "type": "CHoCH",
+              "evidence": {
+                "timeframe": "1h",
+                "trend": "TRANSITION",
+                "score": 0,
+                "recentSwings": [
+                  {
+                    "index": 80,
+                    "time": 1790877600,
+                    "price": 85265.3,
+                    "type": "HIGH",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 83,
+                    "time": 1790888400,
+                    "price": 84454.3,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 87,
+                    "time": 1790902800,
+                    "price": 84472.5,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 90,
+                    "time": 1790913600,
+                    "price": 86888,
+                    "type": "HIGH",
+                    "classification": "STRUCTURAL_SWING"
+                  },
+                  {
+                    "index": 93,
+                    "time": 1790924400,
+                    "price": 85734.6,
+                    "type": "LOW",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 94,
+                    "time": 1790928000,
+                    "price": 86616.5,
+                    "type": "HIGH",
+                    "classification": "MINOR_SWING"
+                  }
+                ],
+                "lastBreak": {
+                  "type": "CHoCH",
+                  "direction": "BULLISH",
+                  "price": 86778.4,
+                  "brokenSwingPrice": 86616.5,
+                  "time": 1790946000,
+                  "timeframe": "1h",
+                  "confirmed": true,
+                  "volumeConfirmed": true
+                },
+                "higherHighsCount": 7,
+                "lowerHighsCount": 6,
+                "higherLowsCount": 9,
+                "lowerLowsCount": 7
+              }
+            }
+          },
+          {
+            "id": "level_recover_sup_1790948825768",
+            "type": "level",
+            "title": "🛡 Відновлення вище 4H підтримки (Crossing Up $85,080.00)",
+            "description": "Ціна відкупилася вище підтримки $85,080.00.",
+            "price": 86892,
+            "timestamp": 1790948825768,
+            "severity": "info"
+          },
           {
             "id": "structure_change_1790783672136",
             "type": "structure",
@@ -71,8 +355,8 @@
           }
         ]
       },
-      "lastCheckedAt": "2026-09-30T15:54:32.136Z",
-      "lastNotifiedAt": "2026-09-30T15:54:32.144Z"
+      "lastCheckedAt": "2026-10-02T14:18:38.324Z",
+      "lastNotifiedAt": "2026-10-02T14:16:25.233Z"
     }
   ],
   "usr_hookprof_wkmp9c": [
@@ -104,51 +388,450 @@
         ]
       },
       "state": {
-        "currentPrice": 84215.9,
-        "change24h": 0.71,
+        "currentPrice": 86506.2,
+        "change24h": 1.98,
         "high1d": 87385.1,
-        "low1d": 62268.2,
-        "swingHigh4h": 84554.9,
-        "swingLow4h": 82851.5,
-        "localHigh1h": 85632.7,
-        "localLow1h": 82901.3,
-        "localHigh15m": 85632.7,
-        "localLow15m": 83325.1,
-        "rangePositionPct": 76.5,
-        "resistance4h": 84350,
-        "support4h": 83778.4,
-        "nextZoneUp": 84635.8,
-        "nextZoneDown": 83492.59999999999,
-        "fib618": 83502.1988,
-        "fib786": 83216.0276,
+        "low1d": 62484.2,
+        "swingHigh4h": 85632.7,
+        "swingLow4h": 83136.6,
+        "localHigh1h": 87249.6,
+        "localLow1h": 84472.5,
+        "localHigh15m": 87249.6,
+        "localLow15m": 86187.3,
+        "rangePositionPct": 65.8,
+        "resistance4h": 87247.3,
+        "support4h": 85080,
+        "nextZoneUp": 88330.95000000001,
+        "nextZoneDown": 83996.35,
+        "fib618": 84090.1102,
+        "fib786": 83670.7654,
         "structureTrend": "bullish",
-        "channelUpper": 85632.7,
-        "channelLower": 82901.3,
-        "momentumRecentPct": 0.55,
-        "lastCalculated": 1790783672146,
+        "channelUpper": 87249.6,
+        "channelLower": 84454.3,
+        "momentumRecentPct": -0.05,
+        "lastCalculated": 1790950718324,
         "lastEvent": {
-          "id": "structure_change_1790783672146",
-          "type": "structure",
-          "title": "🔄 Зміна структури ринку (BULLISH)",
-          "description": "Структура змінила тренд на bullish.",
-          "price": 84215.9,
-          "timestamp": 1790783672146,
-          "severity": "critical"
+          "id": "BTCUSDT_THIRD_TOUCH_zone_4h_RESISTANCE_85632.7",
+          "type": "risk",
+          "title": "Третій тест рівня $85632.7",
+          "description": "Наближення до рівня RESISTANCE. Дистанція: 0.994%. Компресія: ТАК",
+          "price": 86484.01,
+          "timestamp": 1790950696342,
+          "severity": "warning",
+          "details": {
+            "timeframe": "1h",
+            "confluenceScore": 80,
+            "type": "THIRD_TOUCH_APPROACHING",
+            "evidence": {
+              "levelId": "zone_4h_RESISTANCE_85632.7",
+              "levelType": "RESISTANCE",
+              "price": 85632.7,
+              "touchCount": 2,
+              "state": "APPROACHING",
+              "distancePct": 0.994,
+              "approachSpeed": "NORMAL",
+              "compression": true,
+              "higherLowsCount": 6,
+              "lowerHighsCount": 4,
+              "volumeRatio": 1,
+              "updatedAt": 1790950716331
+            }
+          }
         },
         "recentEvents": [
           {
-            "id": "structure_change_1790783672146",
+            "id": "BTCUSDT_THIRD_TOUCH_zone_4h_RESISTANCE_85632.7",
+            "type": "risk",
+            "title": "Третій тест рівня $85632.7",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.994%. Компресія: ТАК",
+            "price": 86484.01,
+            "timestamp": 1790950696342,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_4h_RESISTANCE_85632.7",
+                "levelType": "RESISTANCE",
+                "price": 85632.7,
+                "touchCount": 2,
+                "state": "APPROACHING",
+                "distancePct": 0.994,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 6,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790950716331
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_4h_RESISTANCE_86699.9",
+            "type": "risk",
+            "title": "Третій тест рівня $86699.9",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.249%. Компресія: ТАК",
+            "price": 86484.01,
+            "timestamp": 1790950696342,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_4h_RESISTANCE_86699.9",
+                "levelType": "RESISTANCE",
+                "price": 86699.9,
+                "touchCount": 2,
+                "state": "APPROACHING",
+                "distancePct": 0.249,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 6,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790950716331
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_5m_CHoCH_1790950500",
             "type": "structure",
-            "title": "🔄 Зміна структури ринку (BULLISH)",
-            "description": "Структура змінила тренд на bullish.",
-            "price": 84215.9,
-            "timestamp": 1790783672146,
-            "severity": "critical"
+            "title": "CHoCH на 5M",
+            "description": "Пробій структури BEARISH на рівні $86506.65",
+            "price": 86484.01,
+            "timestamp": 1790950696339,
+            "severity": "warning",
+            "details": {
+              "timeframe": "5m",
+              "confluenceScore": 75,
+              "type": "CHoCH",
+              "evidence": {
+                "timeframe": "5m",
+                "trend": "BULLISH",
+                "score": 95,
+                "recentSwings": [
+                  {
+                    "index": 52,
+                    "time": 1790942400,
+                    "price": 86308,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 58,
+                    "time": 1790944200,
+                    "price": 87220,
+                    "type": "HIGH",
+                    "classification": "STRUCTURAL_SWING"
+                  },
+                  {
+                    "index": 60,
+                    "time": 1790944800,
+                    "price": 86412.04,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 64,
+                    "time": 1790946000,
+                    "price": 86949.61,
+                    "type": "HIGH",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 70,
+                    "time": 1790947800,
+                    "price": 86574,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 71,
+                    "time": 1790948100,
+                    "price": 87150,
+                    "type": "HIGH",
+                    "classification": "MAJOR_SWING"
+                  }
+                ],
+                "lastBreak": {
+                  "type": "CHoCH",
+                  "direction": "BEARISH",
+                  "price": 86506.65,
+                  "brokenSwingPrice": 86574,
+                  "time": 1790950500,
+                  "timeframe": "5m",
+                  "confirmed": true,
+                  "volumeConfirmed": false
+                },
+                "higherHighsCount": 5,
+                "lowerHighsCount": 2,
+                "higherLowsCount": 5,
+                "lowerLowsCount": 3
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_4h_CHoCH_1790942400",
+            "type": "structure",
+            "title": "CHoCH на 4H",
+            "description": "Пробій структури BULLISH на рівні $86404.8",
+            "price": 86484.01,
+            "timestamp": 1790950696338,
+            "severity": "warning",
+            "details": {
+              "timeframe": "4h",
+              "confluenceScore": 75,
+              "type": "CHoCH",
+              "evidence": {
+                "timeframe": "4h",
+                "trend": "TRANSITION",
+                "score": 75,
+                "recentSwings": [
+                  {
+                    "index": 81,
+                    "time": 1790683200,
+                    "price": 84554.9,
+                    "type": "HIGH",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 82,
+                    "time": 1790697600,
+                    "price": 82851.5,
+                    "type": "LOW",
+                    "classification": "MAJOR_SWING"
+                  },
+                  {
+                    "index": 85,
+                    "time": 1790740800,
+                    "price": 82901.3,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 87,
+                    "time": 1790769600,
+                    "price": 85632.7,
+                    "type": "HIGH",
+                    "classification": "STRUCTURAL_SWING"
+                  },
+                  {
+                    "index": 91,
+                    "time": 1790827200,
+                    "price": 84379.8,
+                    "type": "HIGH",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 92,
+                    "time": 1790841600,
+                    "price": 83136.6,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  }
+                ],
+                "lastBreak": {
+                  "type": "CHoCH",
+                  "direction": "BULLISH",
+                  "price": 86404.8,
+                  "brokenSwingPrice": 84379.8,
+                  "time": 1790942400,
+                  "timeframe": "4h",
+                  "confirmed": true,
+                  "volumeConfirmed": true
+                },
+                "higherHighsCount": 8,
+                "lowerHighsCount": 6,
+                "higherLowsCount": 9,
+                "lowerLowsCount": 3
+              }
+            }
+          },
+          {
+            "id": "level_cross_down_15m_1790950585683",
+            "type": "level",
+            "title": "⚠️ Пробій 15m рівня (Crossing Down $86,235.36)",
+            "description": "Пробито локальний 15m рівень підтримки вниз.",
+            "price": 86217.6,
+            "timestamp": 1790950585683,
+            "severity": "info"
+          },
+          {
+            "id": "level_cross_down_15m_1790950554705",
+            "type": "level",
+            "title": "⚠️ Пробій 15m рівня (Crossing Down $86,274.00)",
+            "description": "Пробито локальний 15m рівень підтримки вниз.",
+            "price": 86234.5,
+            "timestamp": 1790950554705,
+            "severity": "info"
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_1d_RESISTANCE_87385.1",
+            "type": "risk",
+            "title": "Третій тест рівня $87385.1",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.909%. Компресія: ТАК",
+            "price": 86590.4,
+            "timestamp": 1790950444108,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_1d_RESISTANCE_87385.1",
+                "levelType": "RESISTANCE",
+                "price": 87385.1,
+                "touchCount": 3,
+                "state": "APPROACHING",
+                "distancePct": 0.909,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790950674167
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_5m_CHoCH_1790949300",
+            "type": "structure",
+            "title": "CHoCH на 5M",
+            "description": "Пробій структури BEARISH на рівні $86573.04",
+            "price": 86609.33,
+            "timestamp": 1790949502397,
+            "severity": "warning",
+            "details": {
+              "timeframe": "5m",
+              "confluenceScore": 75,
+              "type": "CHoCH",
+              "evidence": {
+                "timeframe": "5m",
+                "trend": "BULLISH",
+                "score": 95,
+                "recentSwings": [
+                  {
+                    "index": 56,
+                    "time": 1790942400,
+                    "price": 86308,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 62,
+                    "time": 1790944200,
+                    "price": 87220,
+                    "type": "HIGH",
+                    "classification": "STRUCTURAL_SWING"
+                  },
+                  {
+                    "index": 64,
+                    "time": 1790944800,
+                    "price": 86412.04,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 68,
+                    "time": 1790946000,
+                    "price": 86949.61,
+                    "type": "HIGH",
+                    "classification": "STRUCTURAL_SWING"
+                  },
+                  {
+                    "index": 74,
+                    "time": 1790947800,
+                    "price": 86574,
+                    "type": "LOW",
+                    "classification": "MINOR_SWING"
+                  },
+                  {
+                    "index": 75,
+                    "time": 1790948100,
+                    "price": 87150,
+                    "type": "HIGH",
+                    "classification": "MAJOR_SWING"
+                  }
+                ],
+                "lastBreak": {
+                  "type": "CHoCH",
+                  "direction": "BEARISH",
+                  "price": 86573.04,
+                  "brokenSwingPrice": 86574,
+                  "time": 1790949300,
+                  "timeframe": "5m",
+                  "confirmed": true,
+                  "volumeConfirmed": false
+                },
+                "higherHighsCount": 5,
+                "lowerHighsCount": 2,
+                "higherLowsCount": 6,
+                "lowerLowsCount": 3
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_4h_RESISTANCE_86700",
+            "type": "risk",
+            "title": "Третій тест рівня $86696.831875",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.078%. Компресія: ТАК",
+            "price": 86764.6,
+            "timestamp": 1790949025383,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_4h_RESISTANCE_86700",
+                "levelType": "RESISTANCE",
+                "price": 86696.831875,
+                "touchCount": 2,
+                "state": "ACTIVE",
+                "distancePct": 0.078,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790949025381
+              }
+            }
+          },
+          {
+            "id": "BTCUSDT_THIRD_TOUCH_zone_1d_RESISTANCE_87385",
+            "type": "risk",
+            "title": "Третій тест рівня $87385.1",
+            "description": "Наближення до рівня RESISTANCE. Дистанція: 0.71%. Компресія: ТАК",
+            "price": 86764.6,
+            "timestamp": 1790949025382,
+            "severity": "warning",
+            "details": {
+              "timeframe": "1h",
+              "confluenceScore": 80,
+              "type": "THIRD_TOUCH_APPROACHING",
+              "evidence": {
+                "levelId": "zone_1d_RESISTANCE_87385",
+                "levelType": "RESISTANCE",
+                "price": 87385.1,
+                "touchCount": 3,
+                "state": "APPROACHING",
+                "distancePct": 0.71,
+                "approachSpeed": "NORMAL",
+                "compression": true,
+                "higherLowsCount": 7,
+                "lowerHighsCount": 4,
+                "volumeRatio": 1,
+                "updatedAt": 1790949025381
+              }
+            }
           }
         ]
       },
-      "lastCheckedAt": "2026-09-30T15:54:32.146Z",
-      "lastNotifiedAt": "2026-09-30T15:54:32.147Z"
+      "lastCheckedAt": "2026-10-02T14:18:38.324Z",
+      "lastNotifiedAt": "2026-10-02T14:15:54.709Z"
     }
   ]
 }

@@ -343,14 +343,19 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     volumeSeriesRef.current.setData(volumeData);
   }, [visibleCandles]);
 
+  const focusOnCandlesRef = useRef(focusOnCandles);
+  useEffect(() => {
+    focusOnCandlesRef.current = focusOnCandles;
+  }, [focusOnCandles]);
+
   // Auto-focus on candles whenever a new date/coin is loaded (focusTrigger increments)
   useEffect(() => {
     if (visibleCandles.length === 0) return;
     const timer = setTimeout(() => {
-      focusOnCandles(true);
+      focusOnCandlesRef.current(true);
     }, 80);
     return () => clearTimeout(timer);
-  }, [focusTrigger, focusOnCandles, visibleCandles.length > 0]);
+  }, [focusTrigger]);
 
   // Replay playback auto-follow: ensure newly stepped-in candles stay comfortably inside visible range
   useEffect(() => {

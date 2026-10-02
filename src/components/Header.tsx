@@ -24,6 +24,7 @@ import { MetaScalpSettings } from '../utils/metaScalpService';
 import { useAuth } from '../context/AuthContext';
 import { ActivePageType } from '../types';
 import { useLanguage, SupportedLanguage } from '../context/LanguageContext';
+import { toggleFullscreenSafe } from '../utils/fullscreenUtils';
 
 interface HeaderProps {
   isLoading: boolean;
@@ -80,15 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { language, setLanguage, t } = useLanguage();
 
   const toggleFullScreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
-      });
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    }
+    toggleFullscreenSafe();
   };
 
   const isLinkingEnabled = metaScalpSettings?.enabled ?? true;
@@ -149,6 +142,23 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Activity className="w-3.5 h-3.5 text-cyan-400" />
                 <span>{t('screener')}</span>
+              </button>
+
+              <button
+                id="nav-category-chart-btn"
+                onClick={() => onPageChange('chart')}
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                  activePage === 'chart'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-900/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`}
+                title="Реальний Futures Графік (Binance & Bybit)"
+              >
+                <BarChart2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Графік</span>
+                <span className="px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300">
+                  LIVE
+                </span>
               </button>
 
               <button

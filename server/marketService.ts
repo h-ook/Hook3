@@ -11,26 +11,38 @@ const scanCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 45 * 1000; // 45 seconds
 
 // Helper to map timeframe to exchange interval
-function toBinanceInterval(tf: Timeframe): string {
-  switch (tf) {
+function toBinanceInterval(tf: string): string {
+  switch (tf.toLowerCase()) {
     case '1m': return '1m';
+    case '3m': return '3m';
     case '5m': return '5m';
     case '15m': return '15m';
+    case '30m': return '30m';
     case '1h': return '1h';
+    case '2h': return '2h';
     case '4h': return '4h';
+    case '6h': return '6h';
+    case '12h': return '12h';
     case '1d': return '1d';
+    case '1w': return '1w';
     default: return '1h';
   }
 }
 
-function toBybitInterval(tf: Timeframe): string {
-  switch (tf) {
+function toBybitInterval(tf: string): string {
+  switch (tf.toLowerCase()) {
     case '1m': return '1';
+    case '3m': return '3';
     case '5m': return '5';
     case '15m': return '15';
+    case '30m': return '30';
     case '1h': return '60';
+    case '2h': return '120';
     case '4h': return '240';
+    case '6h': return '360';
+    case '12h': return '720';
     case '1d': return 'D';
+    case '1w': return 'W';
     default: return '60';
   }
 }
@@ -177,7 +189,7 @@ export async function fetchKlines(
   endTime?: number
 ): Promise<Kline[]> {
   const cleanSymbol = symbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  const safeLimit = Math.min(Math.max(limit, 10), 1000);
+  const safeLimit = Math.min(Math.max(limit, 10), 1500);
   const cacheKey = `${exchange}:${market}:${cleanSymbol}:${timeframe}:${safeLimit}:${startTime || ''}:${endTime || ''}`;
 
   const cached = klinesMemoryCache.get(cacheKey);
@@ -595,7 +607,7 @@ export async function fetchMarketCoins(params: {
 }): Promise<MarketCoin[]> {
   const exchange = params.exchange || 'all';
   const marketType = params.marketType || 'all';
-  const minVol = params.minVolumeUsd || 0;
+  const minVol = params.minVolumeUsd !== undefined ? params.minVolumeUsd : 50_000;
   const maxVol = params.maxVolumeUsd !== undefined ? params.maxVolumeUsd : 10_000_000_000;
   const cacheKey = `coins_${exchange}_${marketType}_${minVol}_${maxVol}`;
 

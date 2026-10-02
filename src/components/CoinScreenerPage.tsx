@@ -139,8 +139,8 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const [marketType, setMarketType] = useState<'all' | MarketType>(() => getStoredPreferences().defaultMarketType);
 
   useEffect(() => {
-    setExchange(preferences.defaultExchange);
-    setMarketType(preferences.defaultMarketType);
+    setExchange((prev) => (prev === preferences.defaultExchange ? prev : preferences.defaultExchange));
+    setMarketType((prev) => (prev === preferences.defaultMarketType ? prev : preferences.defaultMarketType));
   }, [preferences.defaultExchange, preferences.defaultMarketType]);
   const [minVolumeUsd, setMinVolumeUsd] = useState<number>(0);
   const [sortBy, setSortBy] = useState<ScreenerSortBy>('volume');

@@ -1,7 +1,30 @@
 export type ExchangeId = 'binance' | 'bybit';
 export type MarketType = 'futures' | 'spot';
-export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
-export type ActivePageType = 'patterns' | 'screener' | 'terminal' | 'surveillance' | 'replay';
+export type Timeframe =
+  | '1m'
+  | '3m'
+  | '5m'
+  | '15m'
+  | '30m'
+  | '1h'
+  | '2h'
+  | '4h'
+  | '6h'
+  | '12h'
+  | '1d'
+  | '1w';
+
+export interface MarketCandle {
+  time: number; // Unix timestamp in seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  quoteVolume?: number;
+  closed: boolean;
+}
+export type ActivePageType = 'patterns' | 'screener' | 'terminal' | 'surveillance' | 'replay' | 'chart';
 
 export type TerminalBlockMode = 'tradingview' | 'pattern' | 'orderbook' | 'combined';
 
@@ -615,6 +638,19 @@ export interface SurveillanceConfig {
   channelEnabled: boolean; // Donchian/Bollinger breakout
   fibonacciEnabled: boolean; // 0.618 Golden Pocket zones
   cooldownMinutes: number; // Minutes between alerts for same event
+  densityMode?: 'AUTO' | 'MANUAL' | 'HYBRID';
+  manualDensityThresholdUsd?: number;
+  formationThreshold?: number;
+  confluenceThreshold?: number;
+  thirdTouchAlerts?: boolean;
+  densityAlerts?: boolean;
+  oiAlerts?: boolean;
+  newsAlerts?: boolean;
+  setupsEnabled?: boolean;
+  telegramEnabled?: boolean;
+  timeframes?: Timeframe[];
+  confirmationModes?: TriggerModeType[];
+  alertLevels?: ('INFO' | 'IMPORTANT' | 'HIGH' | 'CRITICAL')[];
 }
 
 export interface SurveillanceEvent {
@@ -655,6 +691,38 @@ export interface SurveillanceState {
   lastEvent?: SurveillanceEvent;
   recentEvents?: SurveillanceEvent[];
   lastCalculated?: number;
+  // 24/7 Engine Live Properties
+  engineStatus?: 'LIVE' | 'SYNCING' | 'CONNECTING' | 'STALE' | 'ERROR';
+  spreadPct?: number;
+  bestBid?: number;
+  bestAsk?: number;
+  densitiesCount?: number;
+  topDensityUsd?: number;
+  topDensityPrice?: number;
+  topDensitySide?: 'BID' | 'ASK';
+  thirdTouchState?: string;
+  thirdTouchDistancePct?: number;
+  activeSetupType?: string;
+  activeSetupStage?: string;
+  activeSetupConfluence?: number;
+  oiRegime?: string;
+  oiChange15mPct?: number;
+  oiAnomaly?: boolean;
+  tradeFlowBuyUsd?: number;
+  tradeFlowSellUsd?: number;
+  tradeFlowImbalance?: number;
+  btcTrend4h?: string;
+  formationName?: string;
+  formationScore?: number;
+  marketPhase?: string;
+  marketPhaseConfidence?: number;
+  marketPhaseReasoning?: string;
+  nextLikelyState?: string;
+  dataHealthStatus?: string;
+  invalidationPrice?: number;
+  targetPrice?: number;
+  targets?: { tp1: number; tp2: number; tp3: number };
+  waitingFor?: string;
 }
 
 export interface SurveillanceCoin {
