@@ -749,12 +749,12 @@ export async function generateSmartAnalysis(params: {
       : `Стабільний баланс: топ-10 утримують ~${top10ConcentrationPct}%. Показники активних гаманців без різких відхилень, переважно середньостроковий холдинг.`;
 
   // 2. Авто-виявлення Великого Учасника (Whale / Smart Money)
-  const whaleOrders = orderbookData.largeOrders.filter((o) => o.significance === 'whale');
+  const whaleOrders = orderbookData.largeOrders.filter((o: any) => o.significance === 'whale');
   const largePlayerDetected = hasVolumeSpike || whaleOrders.length > 0 || total24hVolUsd > 15e6;
-  const clusterVolumeUsd = whaleOrders.reduce((sum, o) => sum + o.amountUsd, 0) || Math.round(currentPrice * 45000);
+  const clusterVolumeUsd = whaleOrders.reduce((sum: number, o: any) => sum + o.amountUsd, 0) || Math.round(currentPrice * 45000);
 
   const actionType: 'accumulation' | 'absorption' | 'twap_buying' | 'distribution' | 'none' =
-    whaleOrders.some((o) => o.side === 'bid') && hasVolumeSpike
+    whaleOrders.some((o: any) => o.side === 'bid') && hasVolumeSpike
       ? 'absorption'
       : orderbookData.dominantSide === 'bids' && crossSignal !== 'bearish_alignment'
       ? 'twap_buying'
@@ -928,7 +928,7 @@ export async function generateSmartAnalysis(params: {
       : 'УВАГА: висока ймовірність штучних проколів тінями (wick hunting) та збору ліквідності. Торгувати суворо зі зниженим плечем!';
 
   const isManipulativeCoin = manipulativeRiskLevel === 'high' || manipulativeRiskLevel === 'extreme';
-  const manipulativeReasons = signals.filter((s) => s.detected).map((s) => s.description);
+  const manipulativeReasons = signals.filter((s: any) => s.detected).map((s: any) => s.description);
 
   // Comprehensive Ukrainian auto-summary
   const summary = `Комплексний інституційний аудит для ${symbol}: технічний рейтинг ${score}/10 (${verdictLabel}). ` +

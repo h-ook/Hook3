@@ -92,47 +92,6 @@ export class SurveillanceManager {
   public getActiveWorkerCount(): number {
     return this.workers.size;
   }
-
-  public resyncWorker(coinId: string): boolean {
-    const worker = this.workers.get(coinId);
-    if (worker) {
-      worker.resync();
-      return true;
-    }
-    return false;
-  }
-
-  public getHealthMetrics(): {
-    uptimeSeconds: number;
-    activeWorkersCount: number;
-    workers: {
-      id: string;
-      symbol: string;
-      exchange: string;
-      status: string;
-      price: number;
-      latencyMs: number;
-      dataHealth: any;
-    }[];
-  } {
-    const list: any[] = [];
-    for (const [id, w] of this.workers.entries()) {
-      list.push({
-        id,
-        symbol: w.coin.symbol,
-        exchange: w.coin.exchange,
-        status: w.streamClient.status,
-        price: w.currentPrice,
-        latencyMs: w.streamClient.latencyMs,
-        dataHealth: w.streamClient.getDataHealth(),
-      });
-    }
-    return {
-      uptimeSeconds: Math.floor(process.uptime()),
-      activeWorkersCount: this.workers.size,
-      workers: list,
-    };
-  }
 }
 
 export const surveillanceManager = SurveillanceManager.getInstance();

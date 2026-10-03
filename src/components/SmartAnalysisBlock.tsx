@@ -585,7 +585,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Наближення важливих новин та тригерів:
               </span>
               <div className="space-y-1">
-                {data.btcContext.upcomingNews.map((news, idx) => (
+                {data.btcContext.upcomingNews.map((news: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between text-[11px] text-slate-300">
                     <span className="truncate mr-2">• {news.title}</span>
                     <span className="font-mono text-amber-300 shrink-0">{news.timeUntil}</span>
@@ -771,7 +771,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                {data.orderbook.largeOrders.slice(0, 4).map((order, idx) => (
+                {data.orderbook.largeOrders.slice(0, 4).map((order: any, idx: number) => (
                   <div
                     key={idx}
                     className={`p-2 rounded border flex items-center justify-between text-xs font-mono ${
@@ -805,7 +805,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Найближчі пули ліквідності:
               </span>
               <div className="space-y-1 font-mono text-[11px]">
-                {data.levels.liquidityLevels.map((liq, i) => (
+                {data.levels.liquidityLevels.map((liq: any, i: number) => (
                   <div key={i} className="flex items-center justify-between text-slate-300">
                     <span className="text-slate-400 truncate mr-2">{liq.label}</span>
                     <span className="text-white font-bold">{formatCryptoPrice(liq.price)}</span>
@@ -858,7 +858,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               </div>
               {/* Mini Sparkline Bar Chart */}
               <div className="flex items-end gap-1 h-6 pt-1">
-                {data.derivatives.binanceOI.history.map((val, i) => {
+                {data.derivatives.binanceOI.history.map((val: number, i: number) => {
                   const min = Math.min(...data.derivatives.binanceOI.history);
                   const max = Math.max(...data.derivatives.binanceOI.history);
                   const heightPct = max > min ? Math.max(((val - min) / (max - min)) * 100, 15) : 50;
@@ -887,7 +887,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               </div>
               {/* Mini Sparkline Bar Chart */}
               <div className="flex items-end gap-1 h-6 pt-1">
-                {data.derivatives.bybitOI.history.map((val, i) => {
+                {data.derivatives.bybitOI.history.map((val: number, i: number) => {
                   const min = Math.min(...data.derivatives.bybitOI.history);
                   const max = Math.max(...data.derivatives.bybitOI.history);
                   const heightPct = max > min ? Math.max(((val - min) / (max - min)) * 100, 15) : 50;
@@ -1037,7 +1037,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 </span>
                 <div className="space-y-1">
                   {data.participants.largePlayer?.trackedClusters && data.participants.largePlayer.trackedClusters.length > 0 ? (
-                    data.participants.largePlayer.trackedClusters.map((cluster, idx) => (
+                    data.participants.largePlayer.trackedClusters.map((cluster: any, idx: number) => (
                       <div
                         key={idx}
                         className="flex items-center justify-between p-1.5 rounded bg-slate-950/70 border border-slate-800 text-[11px]"
@@ -1181,7 +1181,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 </span>
                 <div className="space-y-1 text-[11px]">
                   {data.participants.manipulativeCoin?.signals ? (
-                    data.participants.manipulativeCoin.signals.map((sig, i) => (
+                    data.participants.manipulativeCoin.signals.map((sig: any, i: number) => (
                       <div
                         key={i}
                         className="flex items-start justify-between p-1.5 rounded bg-slate-950/60 border border-slate-800/80 gap-2"

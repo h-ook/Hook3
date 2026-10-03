@@ -38,7 +38,6 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
-  RotateCcw,
 } from 'lucide-react';
 import { useSurveillance } from '../context/SurveillanceContext';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
@@ -114,8 +113,6 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
     checkCoinNow,
     checkAllCoinsNow,
     getWorkerSnapshot,
-    resyncWorker,
-    testAlert,
     runBacktest,
     refresh,
   } = useSurveillance();
@@ -315,26 +312,6 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
       setIsCheckingMap((prev) => ({ ...prev, [id]: false }));
       setTimeout(() => setNotificationToast(null), 3000);
     }
-  };
-
-  const handleTestAlert = async (id: string, symbol: string) => {
-    setNotificationToast({ message: `Відправка тестового сповіщення #${symbol}...`, type: 'info' });
-    const ok = await testAlert(id);
-    if (ok) {
-      setNotificationToast({ message: `Тестовий сигнал для #${symbol} надіслано в Telegram!`, type: 'success' });
-    } else {
-      setNotificationToast({ message: 'Помилка надсилання. Перевірте Telegram налаштування.', type: 'error' });
-    }
-    setTimeout(() => setNotificationToast(null), 3500);
-  };
-
-  const handleResync = async (id: string, symbol: string) => {
-    setNotificationToast({ message: `Пересинхронізація потоку #${symbol}...`, type: 'info' });
-    const ok = await resyncWorker(id);
-    if (ok) {
-      setNotificationToast({ message: `Потік #${symbol} успішно перезапущено`, type: 'success' });
-    }
-    setTimeout(() => setNotificationToast(null), 3000);
   };
 
   const handleOpenDetails = async (coin: SurveillanceCoin) => {
@@ -718,12 +695,12 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                           <div className="flex items-center gap-2 text-slate-400">
                             <span>Ціна:</span>
                             <strong className="text-white">${formatPrice(ev.price)}</strong>
-                            {ev.details?.timeframe && (
-                              <span className="text-slate-500">• TF: {ev.details.timeframe}</span>
+                            {(ev as any).details?.timeframe && (
+                              <span className="text-slate-500">• TF: {(ev as any).details.timeframe}</span>
                             )}
-                            {ev.details?.confluenceScore && (
+                            {(ev as any).details?.confluenceScore && (
                               <span className="text-emerald-400 font-bold">
-                                • Conf: {ev.details.confluenceScore}/100
+                                • Conf: {(ev as any).details.confluenceScore}/100
                               </span>
                             )}
                           </div>
@@ -883,20 +860,6 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                             ПАУЗА
                           </span>
                         )}
-                        {state?.marketPhase && (
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800 flex items-center gap-1 font-mono cursor-help"
-                            title={`${state.marketPhaseReasoning || ''} Наступний стан: ${state.nextLikelyState || ''}`}
-                          >
-                            <Activity className="w-2.5 h-2.5 text-cyan-400" />
-                            {state.marketPhase} ({state.marketPhaseConfidence || 75}%)
-                          </span>
-                        )}
-                        {state?.dataHealthStatus && state.dataHealthStatus !== 'LIVE' && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
-                            {state.dataHealthStatus}
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 font-mono">
                         <span>Ціна:</span>
@@ -922,20 +885,6 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleTestAlert(coin.id, coin.symbol)}
-                      title="Надіслати тестовий алерт у Telegram"
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 transition-colors cursor-pointer"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleResync(coin.id, coin.symbol)}
-                      title="Пересинхронізувати потік та історію"
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
                     <button
                       onClick={() => handleCheckCoin(coin.id, coin.symbol)}
                       disabled={isChecking}
@@ -976,7 +925,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                 <div className="p-4 space-y-3.5 flex-1 text-xs">
                   {/* Active Setup Banner if any (#67, #76, #83) */}
                   {state?.activeSetupType ? (
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-950/40 via-cyan-950/30 to-slate-950 border border-emerald-500/40 space-y-2">
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-950/40 via-cyan-950/30 to-slate-950 border border-emerald-500/40 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -992,25 +941,6 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                         <span>Підтримка: ${formatPrice(state.support4h)}</span>
                         <span>Опір: ${formatPrice(state.resistance4h)}</span>
                       </div>
-                      {(state.invalidationPrice || state.targetPrice || state.waitingFor) && (
-                        <div className="pt-1.5 border-t border-slate-800/80 text-[10px] font-mono flex flex-wrap items-center justify-between gap-1.5 text-slate-400">
-                          {state.invalidationPrice && (
-                            <span className="text-rose-400">
-                              SL: <strong>${formatPrice(state.invalidationPrice)}</strong>
-                            </span>
-                          )}
-                          {state.targetPrice && (
-                            <span className="text-emerald-400">
-                              TP: <strong>${formatPrice(state.targetPrice)}</strong>
-                            </span>
-                          )}
-                          {state.waitingFor && (
-                            <span className="text-cyan-300 w-full truncate">
-                              Очікується: {state.waitingFor}
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ) : null}
 
@@ -1186,7 +1116,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                     {/* Expanded list of coin's recent events */}
                     {expandedCoinEventsMap[coin.id] && state?.recentEvents && state.recentEvents.length > 0 && (
                       <div className="space-y-1.5 max-h-48 overflow-y-auto pt-1 font-mono text-[10px]">
-                        {state.recentEvents.slice(0, 6).map((e, idx) => (
+                        {state.recentEvents.slice(0, 6).map((e: any, idx: number) => (
                           <div
                             key={idx}
                             className="p-2 rounded-lg bg-slate-950 border border-slate-800/80 flex items-center justify-between gap-2"
@@ -1505,39 +1435,6 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                   </div>
                 </>
               )}
-
-              {/* Multi-Timeframes (Section 77) */}
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Таймфрейми для аналізу (MTF Engine 2.0)</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(['1d', '4h', '1h', '15m', '5m'] as Timeframe[]).map((tf) => {
-                    const isSelected = formConfig.timeframes?.includes(tf) ?? true;
-                    return (
-                      <button
-                        key={tf}
-                        type="button"
-                        onClick={() => {
-                          const current = formConfig.timeframes || ['1d', '4h', '1h', '15m', '5m'];
-                          const next = current.includes(tf)
-                            ? current.filter((t) => t !== tf)
-                            : [...current, tf];
-                          setFormConfig((p) => ({ ...p, timeframes: next.length > 0 ? next : [tf] }));
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border cursor-pointer ${
-                          isSelected
-                            ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
-                            : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
-                        }`}
-                      >
-                        {isSelected ? '✓ ' : ''}{tf.toUpperCase()}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
 
               {/* Breakout Confirmation Modes (Multi-select) (#94) */}
               <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">

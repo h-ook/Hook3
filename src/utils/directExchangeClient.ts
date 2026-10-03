@@ -142,6 +142,11 @@ export async function fetchDirectBinanceTickers(): Promise<MarketCoin[]> {
           price,
           change24h: Number(change24h.toFixed(2)),
           volumeUsd,
+          volume24h: volumeUsd,
+          currentPrice: price,
+          priceChange24h: Number(change24h.toFixed(2)),
+          volume24hUsd: volumeUsd,
+          formations: [],
           high24h: high,
           low24h: low,
           distanceToHighPct: Number(distanceToHighPct.toFixed(2)),
@@ -195,6 +200,11 @@ export async function fetchDirectBinanceTickers(): Promise<MarketCoin[]> {
           price,
           change24h: Number(change24h.toFixed(2)),
           volumeUsd,
+          volume24h: volumeUsd,
+          currentPrice: price,
+          priceChange24h: Number(change24h.toFixed(2)),
+          volume24hUsd: volumeUsd,
+          formations: [],
           high24h: high,
           low24h: low,
           distanceToHighPct: Number(distanceToHighPct.toFixed(2)),
@@ -211,7 +221,7 @@ export async function fetchDirectBinanceTickers(): Promise<MarketCoin[]> {
     } catch {}
   }
 
-  coins.sort((a, b) => b.volumeUsd - a.volumeUsd);
+  coins.sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0));
   return coins;
 }
 
@@ -270,6 +280,11 @@ export async function fetchDirectBybitTickers(): Promise<MarketCoin[]> {
             price,
             change24h: Number(change24h.toFixed(2)),
             volumeUsd,
+            volume24h: volumeUsd,
+            currentPrice: price,
+            priceChange24h: Number(change24h.toFixed(2)),
+            volume24hUsd: volumeUsd,
+            formations: [],
             high24h: high,
             low24h: low,
             distanceToHighPct: Number(distanceToHighPct.toFixed(2)),
@@ -287,7 +302,7 @@ export async function fetchDirectBybitTickers(): Promise<MarketCoin[]> {
     }
   }
 
-  coins.sort((a, b) => b.volumeUsd - a.volumeUsd);
+  coins.sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0));
   return coins;
 }
 
@@ -432,7 +447,7 @@ export async function runDirectClientScan(params: {
       topCandidates.map(async (coin) => {
         try {
           const klines = await fetchDirectKlines(coin.exchange, coin.marketType, coin.symbol, params.timeframe, 60);
-          const formations = klines.length >= 20 ? detectFormations(klines, coin.symbol) : [];
+          const formations = klines.length >= 20 ? detectFormations(klines, coin.symbol).filter((f) => f.validation?.confirmed && f.validation?.passed) : [];
 
           scanned.push({
             symbol: coin.symbol,
@@ -440,11 +455,15 @@ export async function runDirectClientScan(params: {
             quoteAsset: coin.quoteAsset,
             exchange: coin.exchange,
             marketType: coin.marketType,
-            currentPrice: coin.price,
-            priceChange24h: coin.change24h,
+            price: coin.price,
+            change24h: coin.change24h,
+            volume24h: coin.volumeUsd,
+            volumeUsd: coin.volumeUsd,
+            currentPrice: coin.price ?? 0,
+            priceChange24h: coin.change24h ?? 0,
             highPrice24h: coin.high24h,
             lowPrice24h: coin.low24h,
-            volume24hUsd: coin.volumeUsd,
+            volume24hUsd: coin.volumeUsd ?? 0,
             formations,
             timeframe: params.timeframe,
             lastUpdated: Date.now(),
@@ -468,20 +487,28 @@ export async function runDirectClientScan(params: {
  * Emergency static fallback coins (ensures coin search and selection ALWAYS work)
  */
 export function getFallbackScannedCoins(timeframe: Timeframe = '1h'): ScannedCoin[] {
-  return TOP_POPULAR_PAIRS.map((p, idx) => ({
-    symbol: p.symbol,
-    baseAsset: p.baseAsset,
-    quoteAsset: 'USDT',
-    exchange: 'binance',
-    marketType: 'futures',
-    currentPrice: idx === 0 ? 84500 : idx === 1 ? 2200 : idx === 2 ? 140 : 1.5,
-    priceChange24h: 1.25,
-    highPrice24h: idx === 0 ? 85500 : 2300,
-    lowPrice24h: idx === 0 ? 83500 : 2150,
-    volume24hUsd: 100_000_000 - idx * 2_000_000,
-    formations: [],
-    timeframe,
-    lastUpdated: Date.now(),
-    exchangeUrl: getExchangeUrl('binance', 'futures', p.symbol),
-  }));
+  return TOP_POPULAR_PAIRS.map((p, idx) => {
+    const price = idx === 0 ? 84500 : idx === 1 ? 2200 : idx === 2 ? 140 : 1.5;
+    const vol = 100_000_000 - idx * 2_000_000;
+    return {
+      symbol: p.symbol,
+      baseAsset: p.baseAsset,
+      quoteAsset: 'USDT',
+      exchange: 'binance',
+      marketType: 'futures',
+      price,
+      change24h: 1.25,
+      volume24h: vol,
+      volumeUsd: vol,
+      currentPrice: price,
+      priceChange24h: 1.25,
+      highPrice24h: idx === 0 ? 85500 : 2300,
+      lowPrice24h: idx === 0 ? 83500 : 2150,
+      volume24hUsd: vol,
+      formations: [],
+      timeframe,
+      lastUpdated: Date.now(),
+      exchangeUrl: getExchangeUrl('binance', 'futures', p.symbol),
+    };
+  });
 }

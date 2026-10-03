@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { ScreenerFilters } from './components/ScreenerFilters';
 import { FormationCard } from './components/FormationCard';
@@ -7,7 +7,6 @@ import { CoinScreenerPage } from './components/CoinScreenerPage';
 import { TerminalPage } from './components/TerminalPage';
 import { SurveillancePage } from './components/SurveillancePage';
 import { ReplayPage } from './components/ReplayPage';
-import { RealtimeFuturesChart } from './components/chart/RealtimeFuturesChart';
 import { FormationDetailsModal } from './components/FormationDetailsModal';
 import { FormationGuideModal } from './components/FormationGuideModal';
 import { WatchlistDrawer } from './components/WatchlistDrawer';
@@ -66,6 +65,7 @@ export default function App() {
   const { preferences } = useAppPreferences();
   const { t } = useLanguage();
   const [coins, setCoins] = useState<ScannedCoin[]>(() => getFallbackScannedCoins());
+  const scanRequestRef = useRef(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ScreenerFilterState>(() => {
@@ -121,10 +121,6 @@ export default function App() {
         setActivePage((prev) => (prev === 'replay' ? prev : 'replay'));
         return;
       }
-      if (hash === '#chart') {
-        setActivePage((prev) => (prev === 'chart' ? prev : 'chart'));
-        return;
-      }
       if (!user) {
         setActivePage((prev) => (prev === 'screener' ? prev : 'screener'));
         if (hash && hash !== '#screener' && hash !== '') {
@@ -135,8 +131,6 @@ export default function App() {
       }
       if (hash === '#patterns') {
         setActivePage((prev) => (prev === 'patterns' ? prev : 'patterns'));
-      } else if (hash === '#chart') {
-        setActivePage((prev) => (prev === 'chart' ? prev : 'chart'));
       } else if (hash === '#terminal') {
         setActivePage((prev) => (prev === 'terminal' ? prev : 'terminal'));
       } else if (hash === '#surveillance') {
@@ -155,7 +149,7 @@ export default function App() {
   }, [user?.uid, handleOpenAuthModal]);
 
   const handlePageChange = (page: ActivePageType) => {
-    if (!user && page !== 'screener' && page !== 'replay' && page !== 'chart') {
+    if (!user && page !== 'screener' && page !== 'replay') {
       handleOpenAuthModal('signin', 'general');
       return;
     }
@@ -458,17 +452,20 @@ export default function App() {
       const matchingCoin: ScannedCoin = foundCoin || {
         symbol: archived.symbol,
         baseAsset: archived.baseAsset,
-        quoteAsset: archived.quoteAsset,
+        quoteAsset: archived.quoteAsset || 'USDT',
         exchange: archived.exchange,
-        marketType: archived.marketType,
-        currentPrice: archived.savedPrice,
+        marketType: archived.marketType || 'futures',
+        price: archived.savedPrice || 0,
+        change24h: 0,
+        volume24h: 0,
+        currentPrice: archived.savedPrice || 0,
         priceChange24h: 0,
         volume24hUsd: 0,
         highPrice24h: archived.savedPrice,
         lowPrice24h: archived.savedPrice,
         high24h: archived.savedPrice,
         low24h: archived.savedPrice,
-        timeframe: archived.timeframe,
+        timeframe: archived.timeframe || '1h',
         formations: [archived.formation],
         hasFormations: true,
         bestFormation: archived.formation,
@@ -521,12 +518,14 @@ export default function App() {
   }, [soundEnabled]);
 
   // Fetch screener data from API
-  const fetchScreenerData = useCallback(async (currentTf = filters.timeframe, currentExchange = filters.exchange, currentMarket = filters.marketType) => {
+  const fetchScreenerData = useCallback(async (currentTf = filters.timeframe || '15m', currentExchange = filters.exchange, currentMarket = filters.marketType) => {
+    const requestId = ++scanRequestRef.current;
     setIsLoading(true);
     setError(null);
     try {
+      const tf = currentTf || '15m';
       const params = new URLSearchParams({
-        timeframe: currentTf,
+        timeframe: tf,
         exchange: currentExchange,
         marketType: currentMarket,
         minVolume: '0',
@@ -540,6 +539,7 @@ export default function App() {
           if (contentType && contentType.includes('application/json')) {
             const data = await res.json();
             if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+              if (requestId !== scanRequestRef.current) return;
               setCoins(data.data);
               setLastUpdated(Date.now());
               dataLoaded = true;
@@ -562,9 +562,10 @@ export default function App() {
         const directCoins = await runDirectClientScan({
           exchange: currentExchange,
           marketType: currentMarket,
-          timeframe: currentTf,
+          timeframe: tf,
         });
         if (directCoins.length > 0) {
+          if (requestId !== scanRequestRef.current) return;
           setCoins(directCoins);
           setLastUpdated(Date.now());
           dataLoaded = true;
@@ -573,7 +574,7 @@ export default function App() {
     } catch (err: any) {
       console.warn('Scan complete fallback error:', err);
     } finally {
-      setIsLoading(false);
+      if (requestId === scanRequestRef.current) setIsLoading(false);
     }
   }, [filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, playAlertSound]);
 
@@ -677,7 +678,7 @@ export default function App() {
 
     for (const coin of coins) {
       // Filter by minimum volume
-      if (filters.minVolumeUsd > 0 && coin.volume24hUsd < filters.minVolumeUsd) {
+      if ((filters.minVolumeUsd || 0) > 0 && coin.volume24hUsd < (filters.minVolumeUsd || 0)) {
         continue;
       }
 
@@ -816,17 +817,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4">
-        {activePage === 'chart' ? (
-          <div className="w-full h-[calc(100vh-100px)] min-h-[640px] flex flex-col">
-            <RealtimeFuturesChart
-              initialSymbol="BTCUSDT"
-              initialExchange="binance"
-              initialTimeframe="15m"
-              height="100%"
-              isFullscreen={false}
-            />
-          </div>
-        ) : activePage === 'terminal' ? (
+        {activePage === 'terminal' ? (
           <TerminalPage
             coins={coins}
             watchlist={watchlist}
@@ -993,7 +984,7 @@ export default function App() {
               <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 min-[2200px]:grid-cols-7 min-[2800px]:grid-cols-8 gap-3 sm:gap-4">
                 {flattenedItems.map(({ coin, formation }, idx) => (
                   <FormationCard
-                    key={`${coin.exchange}-${coin.symbol}-${coin.marketType}-${formation.id}-${idx}`}
+                    key={`${coin.exchange}-${coin.symbol}-${coin.marketType}-${formation.id}`}
                     coin={coin}
                     formation={formation}
                     isWatchlisted={watchlist.includes(coin.symbol)}
@@ -1126,7 +1117,7 @@ export default function App() {
             id: Date.now(),
             symbol: alert.symbol,
             targetPrice: alert.targetPrice,
-            condition: alert.condition,
+            condition: (alert.condition === 'lte' || alert.direction === 'below') ? 'lte' : 'gte',
             message: alert.note || alert.formationName || 'Алерт додано в чергу моніторингу',
           });
         }}

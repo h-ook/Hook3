@@ -31,7 +31,6 @@ import {
 import { TerminalChartWidget } from './terminal/TerminalChartWidget';
 import { AddChartModal } from './terminal/AddChartModal';
 import { TerminalSettingsDrawer } from './terminal/TerminalSettingsDrawer';
-import { RealtimeFuturesChart } from './chart/RealtimeFuturesChart';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
 import { useAuth } from '../context/AuthContext';
@@ -395,6 +394,47 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       ]);
     }
   };
+
+  // Build TradingView Embed URL
+  const tradingViewUrl = useMemo(() => {
+    const cleanSymbol = activeCoin.symbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const isBybit = activeCoin.exchange === 'bybit';
+    const isFutures = activeCoin.marketType === 'futures';
+
+    const tvPrefix = isBybit ? 'BYBIT' : 'BINANCE';
+    const tvSymbol = isFutures ? `${tvPrefix}:${cleanSymbol}.P` : `${tvPrefix}:${cleanSymbol}`;
+
+    let interval = '15';
+    switch (timeframe) {
+      case '1m': interval = '1'; break;
+      case '5m': interval = '5'; break;
+      case '15m': interval = '15'; break;
+      case '1h': interval = '60'; break;
+      case '4h': interval = '240'; break;
+      case '1d': interval = 'D'; break;
+      default: interval = '15';
+    }
+
+    const params = new URLSearchParams({
+      symbol: tvSymbol,
+      interval: interval,
+      theme: 'dark',
+      style: '1',
+      timezone: 'exchange',
+      withdateranges: '0',
+      hide_top_toolbar: '1',
+      hide_side_toolbar: '0',
+      allow_symbol_change: '0',
+      save_image: '0',
+      hide_legend: '1',
+      locale: 'uk',
+      toolbar_bg: '#090d16',
+      gridColor: 'rgba(0,0,0,0)',
+      gridTransparency: '100',
+    });
+
+    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
+  }, [activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, timeframe]);
 
   // Block management
   const handleAddChart = (
@@ -1099,19 +1139,46 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
         {/* Workspace Display: If 1 block or maximized block, show full single chart. If multiple blocks, show multi-chart grid */}
         {blocks.length <= 1 ? (
-          /* Single Screen 100% View Realtime Futures Terminal */
-          <div className="w-full h-full relative overflow-hidden p-1 sm:p-2">
-            <RealtimeFuturesChart
-              initialSymbol={activeCoin.symbol}
-              initialExchange={activeCoin.exchange}
-              initialTimeframe={timeframe}
-              height="100%"
-              isFullscreen={false}
-              onSymbolChange={(newSym) => {
-                const matched = coins.find((c) => c.symbol.toUpperCase() === newSym.toUpperCase());
-                if (matched) setActiveCoin(matched);
-              }}
+          /* Single Screen 100% View TradingView Pro */
+          <div className="w-full h-full relative overflow-hidden">
+            {iframeLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400 gap-3 z-10 pointer-events-none">
+                <RefreshCw className="w-8 h-8 animate-spin text-cyan-400" />
+                <span className="text-sm font-medium">Завантаження графіку {activeCoin.symbol}...</span>
+              </div>
+            )}
+            <div
+              className={`absolute top-0 h-full transition-[width,left] duration-200 ease-in-out ${
+                showDrawingToolbar ? 'left-0 w-full' : '-left-[54px] w-[calc(100%+54px)]'
+              }`}
+            >
+              <iframe
+                key={tradingViewUrl}
+                src={tradingViewUrl}
+                className="h-full w-full border-0"
+                title={`TradingView Chart ${activeCoin.symbol}`}
+                onLoad={() => setIframeLoading(false)}
+                allow="fullscreen"
+                loading="lazy"
+              />
+            </div>
+            <div
+              className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-[54px] bg-transparent transition-transform duration-200 ${
+                showDrawingToolbar ? '-translate-x-full' : 'translate-x-0'
+              }`}
+              aria-hidden={showDrawingToolbar}
             />
+            <div className="absolute bottom-2 left-2 z-20 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleDrawingToolbar}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/85 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-cyan-300 shadow-md backdrop-blur-sm transition-all cursor-pointer group"
+                title={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
+                aria-label={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
+              >
+                {showDrawingToolbar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         ) : (
           /* Multi-chart Grid Layout */

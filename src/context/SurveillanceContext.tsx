@@ -35,8 +35,6 @@ interface SurveillanceContextType {
   checkCoinNow: (id: string, forceNotify?: boolean) => Promise<SurveillanceCoin | null>;
   checkAllCoinsNow: () => Promise<boolean>;
   getWorkerSnapshot: (id: string) => Promise<any | null>;
-  resyncWorker: (id: string) => Promise<boolean>;
-  testAlert: (id: string) => Promise<boolean>;
   runBacktest: (symbol: string, exchange?: ExchangeId, marketType?: MarketType, timeframe?: string) => Promise<any | null>;
   isCoinMonitored: (symbol: string, exchange?: ExchangeId) => boolean;
   isCoinOnSurveillance: (symbol: string, exchange?: ExchangeId) => boolean;
@@ -99,26 +97,6 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return json.success ? json.data : null;
     } catch {
       return null;
-    }
-  };
-
-  const resyncWorker = async (id: string): Promise<boolean> => {
-    try {
-      const res = await fetch(`/api/surveillance/${encodeURIComponent(id)}/resync`, { method: 'POST' });
-      const json = await res.json();
-      return Boolean(json.success);
-    } catch {
-      return false;
-    }
-  };
-
-  const testAlert = async (id: string): Promise<boolean> => {
-    try {
-      const res = await fetch(`/api/surveillance/${encodeURIComponent(id)}/test-alert`, { method: 'POST' });
-      const json = await res.json();
-      return Boolean(json.success);
-    } catch {
-      return false;
     }
   };
 
@@ -381,8 +359,6 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
         checkCoinNow,
         checkAllCoinsNow,
         getWorkerSnapshot,
-        resyncWorker,
-        testAlert,
         runBacktest,
         isCoinMonitored,
         isCoinOnSurveillance,

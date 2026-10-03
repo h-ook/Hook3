@@ -1,5 +1,6 @@
 import { EngineAlertEvent, SetupInstance, ThirdTouchTracker, DensityItem, OISnapshot, NewsItem } from './types';
-import { notificationRouter, NotificationEventType } from '../notificationRouter';
+import { sendTelegramMessage } from '../telegramService';
+import { getUserTelegram } from '../alertService';
 
 function formatCryptoPrice(val: number): string {
   if (!val && val !== 0) return '0.00';
@@ -10,6 +11,8 @@ function formatCryptoPrice(val: number): string {
 }
 
 export class StateMachineAndAlerts {
+  private lastAlertTimestamps = new Map<string, number>();
+
   // Cooldown durations per alert type in ms
   private readonly cooldowns: Record<string, number> = {
     THIRD_TOUCH_APPROACHING: 15 * 60 * 1000,
@@ -29,31 +32,15 @@ export class StateMachineAndAlerts {
   };
 
   public canSendAlert(key: string, eventType: string): boolean {
-    const cooldownMs = this.cooldowns[eventType] || 15 * 60 * 1000;
-    const check = notificationRouter.canDispatch({
-      eventId: key,
-      userId: 'system',
-      symbol: key.split('_')[0] || 'CRYPTO',
-      exchange: 'binance',
-      marketType: 'futures',
-      eventType: this.mapEventType(eventType),
-      title: eventType,
-      description: key,
-      price: 0,
-      metadata: { cooldownMs },
-    });
-    return check.canDispatch;
-  }
+    const now = Date.now();
+    const lastTime = this.lastAlertTimestamps.get(key) || 0;
+    const cooldown = this.cooldowns[eventType] || 15 * 60 * 1000;
 
-  private mapEventType(raw: string): NotificationEventType {
-    if (raw.includes('BOS')) return 'BOS';
-    if (raw.includes('CHoCH')) return 'CHoCH';
-    if (raw.includes('STRUCTURE')) return 'STRUCTURE_SHIFT';
-    if (raw.includes('THIRD_TOUCH')) return 'THIRD_TOUCH';
-    if (raw.includes('DENSITY')) return 'DENSITY';
-    if (raw.includes('OI')) return 'OI_ANOMALY';
-    if (raw.includes('RETEST') || raw.includes('SETUP')) return 'SETUP';
-    return 'SURVEILLANCE_LEVEL';
+    if (now - lastTime >= cooldown) {
+      this.lastAlertTimestamps.set(key, now);
+      return true;
+    }
+    return false;
   }
 
   // Telegram Support Retest formatted message (#83)
@@ -148,25 +135,16 @@ ${exchange.toUpperCase()}
 <b>Статус:</b> STRUCTURE SHIFT`;
   }
 
-  // Dispatch alert via unified Notification Router
-  public async dispatchAlert(userId: string, htmlMessage: string, eventDetails?: Partial<any>) {
+  // Dispatch alert to user Telegram
+  public async dispatchAlert(userId: string, htmlMessage: string) {
+    const userTg = getUserTelegram(userId);
     try {
-      await notificationRouter.dispatch({
-        userId: userId || 'guest',
-        symbol: eventDetails?.symbol || 'CRYPTO',
-        exchange: eventDetails?.exchange || 'binance',
-        marketType: eventDetails?.marketType || 'futures',
-        eventType: eventDetails?.eventType || 'SURVEILLANCE_LEVEL',
-        title: eventDetails?.title || 'Системне сповіщення нагляду',
-        description: eventDetails?.description || '',
-        price: eventDetails?.price || 0,
-        timeframe: eventDetails?.timeframe,
-        severity: eventDetails?.severity || 'info',
-        telegramHtml: htmlMessage,
-        channels: ['telegram', 'browser', 'internal'],
+      await sendTelegramMessage(htmlMessage, {
+        botToken: userTg?.botToken,
+        chatId: userTg?.chatId,
       });
     } catch (e) {
-      console.error(`[AlertDispatcher] Error routing surveillance alert for user ${userId}:`, e);
+      console.error(`[AlertDispatcher] Error sending Telegram message to user ${userId}:`, e);
     }
   }
 }

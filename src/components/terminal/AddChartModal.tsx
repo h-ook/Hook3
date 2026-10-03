@@ -102,7 +102,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
           fetchDirectBybitTickers(),
         ]);
         const combined = [...binanceTickers, ...bybitTickers].filter(
-          (c) => c.volumeUsd >= 50_000 && c.volumeUsd <= 10_000_000_000
+          (c) => c.volumeUsd != null && c.volumeUsd >= 50_000 && c.volumeUsd <= 10_000_000_000
         );
         if (isMounted && combined.length > 0) {
           setMarketCoins(combined);
@@ -195,9 +195,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     } else if (filterTab === 'watchlist') {
       result = result.filter((c) => watchlist.includes(c.symbol));
     } else if (filterTab === 'gainers') {
-      result = [...result].sort((a, b) => b.priceChange24h - a.priceChange24h);
+      result = [...result].sort((a, b) => (b.priceChange24h || 0) - (a.priceChange24h || 0));
     } else if (filterTab === 'losers') {
-      result = [...result].sort((a, b) => a.priceChange24h - b.priceChange24h);
+      result = [...result].sort((a, b) => (a.priceChange24h || 0) - (b.priceChange24h || 0));
     } else if (filterTab === 'volume' || filterTab === 'all') {
       result = [...result].sort((a, b) => (b.volume24hUsd || 0) - (a.volume24hUsd || 0));
     }
@@ -583,7 +583,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
               </div>
 
               {filteredCoins.slice(0, displayCount).map((coin) => {
-                const isPositive = coin.priceChange24h >= 0;
+                const isPositive = (coin.priceChange24h || 0) >= 0;
                 const hasFormations = coin.formations && coin.formations.length > 0;
                 const firstFormation = hasFormations ? coin.formations[0] : null;
 
@@ -653,7 +653,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                           {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                           <span>
                             {isPositive ? '+' : ''}
-                            {coin.priceChange24h.toFixed(2)}%
+                            {(coin.priceChange24h || 0).toFixed(2)}%
                           </span>
                         </div>
                       </div>

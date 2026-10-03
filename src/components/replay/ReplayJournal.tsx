@@ -566,7 +566,7 @@ export const ReplayJournal: React.FC<ReplayJournalProps> = ({
                             : 'bg-rose-500/20 text-rose-300'
                         }`}
                       >
-                        {order.side.toUpperCase()} {order.orderType.toUpperCase()}
+                        {order.side.toUpperCase()} {(order.orderType || order.type || 'LIMIT').toUpperCase()}
                       </span>
                       <span className="font-bold text-white">{order.symbol}</span>
                       <span className="text-amber-400">

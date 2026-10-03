@@ -1062,7 +1062,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                         Стоп-лос (Stop Loss):
                       </span>
                       <div className="text-right">
-                        <span className="font-bold text-rose-400">${formatPrice(formation.levels.stopLossPrice)}</span>
+                        <span className="font-bold text-rose-400">${formatPrice(formation.levels.stopLossPrice ?? 0)}</span>
                         <span className="text-[10px] text-rose-300 ml-1.5">(-{Math.abs(formation.potentialRiskPct)}%)</span>
                       </div>
                     </div>
@@ -1160,7 +1160,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => handleSetAlert('stop_loss', formation.levels.stopLossPrice)}
+                          onClick={() => formation.levels.stopLossPrice && handleSetAlert('stop_loss', formation.levels.stopLossPrice)}
                           disabled={settingAlert !== null}
                           className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-rose-500/50 text-slate-300 hover:text-white transition-all text-center cursor-pointer group disabled:opacity-50"
                           title="Надіслати в Telegram, коли ціна досягне стоп-лосу"
@@ -1169,7 +1169,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                             <ShieldAlert className="w-2.5 h-2.5" /> Стоп
                           </div>
                           <div className="font-mono font-bold text-[11px] text-white mt-0.5">
-                            ${formatPrice(formation.levels.stopLossPrice)}
+                            ${formatPrice(formation.levels.stopLossPrice ?? 0)}
                           </div>
                         </button>
                       </div>
@@ -1267,7 +1267,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                       Ключові ризики:
                     </span>
                     <ul className="list-disc list-inside text-slate-400 text-xs space-y-0.5">
-                      {aiAnalysis.keyRisks.map((risk, idx) => (
+                      {aiAnalysis.keyRisks.map((risk: any, idx: number) => (
                         <li key={idx}>{risk}</li>
                       ))}
                     </ul>

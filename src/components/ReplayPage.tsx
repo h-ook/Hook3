@@ -239,21 +239,24 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
         const combined = [...binanceTickers, ...bybitTickers];
         if (!isCancelled && combined.length > 0) {
           const mapped: ScannedCoin[] = combined
-            .filter((c) => c.volumeUsd >= 100_000 && c.volumeUsd <= 10_000_000_000)
+            .filter((c) => (c.volumeUsd ?? 0) >= 100_000 && (c.volumeUsd ?? 0) <= 10_000_000_000)
             .map((c) => ({
               symbol: c.symbol,
               baseAsset: c.baseAsset,
               quoteAsset: c.quoteAsset || 'USDT',
               exchange: c.exchange,
               marketType: c.marketType,
-              price: c.price,
-              currentPrice: c.price,
+              price: c.price ?? 0,
+              change24h: c.change24h || 0,
+              volume24h: c.volumeUsd || 0,
+              volumeUsd: c.volumeUsd || 0,
+              currentPrice: c.price ?? 0,
               priceChange24h: c.change24h || 0,
               volume24hUsd: c.volumeUsd || 0,
-              high24h: c.high24h || c.price,
-              low24h: c.low24h || c.price,
-              highPrice24h: c.high24h || c.price,
-              lowPrice24h: c.low24h || c.price,
+              high24h: c.high24h || c.price || 0,
+              low24h: c.low24h || c.price || 0,
+              highPrice24h: c.high24h || c.price || 0,
+              lowPrice24h: c.low24h || c.price || 0,
               timeframe: '1h' as Timeframe,
               formations: [],
               hasFormations: false,
@@ -301,6 +304,9 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
       exchange: 'binance' as ExchangeId,
       marketType: 'futures' as MarketType,
       price: 0,
+      change24h: 0,
+      volume24h: 5_000_000,
+      volumeUsd: 5_000_000,
       currentPrice: 0,
       priceChange24h: 0,
       volume24hUsd: 5_000_000,
@@ -404,12 +410,13 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
               return prevPos;
             }
             const posSide = order.side === 'buy' ? 'long' : 'short';
-            const margin = order.sizeUsd / order.leverage;
+            const orderSizeUsd = order.sizeUsd ?? 0;
+            const margin = orderSizeUsd / order.leverage;
             const liqPrice = calculateLiquidationPrice(fillPrice, posSide, order.leverage);
 
             showToast(
               'success',
-              `Відкладений ${order.orderType.toUpperCase()} виконано`,
+              `Відкладений ${(order.orderType || order.type || 'LIMIT').toUpperCase()} виконано`,
               `${order.side.toUpperCase()} ${order.symbol} за ціною $${fillPrice.toFixed(2)}`
             );
             playSound('order');
@@ -420,18 +427,24 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
               side: posSide,
               entryPrice: fillPrice,
               currentPrice: fillPrice,
-              sizeUsd: order.sizeUsd,
+              size: fillPrice > 0 ? orderSizeUsd / fillPrice : 0,
+              sizeUsd: orderSizeUsd,
+              margin,
               marginUsd: margin,
-              quantity: order.sizeUsd / fillPrice,
+              quantity: fillPrice > 0 ? orderSizeUsd / fillPrice : 0,
               leverage: order.leverage,
               slPrice: order.slPrice,
               tpPrice: order.tpPrice,
               entryTime: nextCandle.time,
+              openedAt: nextCandle.time,
+              pnl: 0,
+              pnlPercentage: 0,
               unrealizedPnlUsd: 0,
               unrealizedPnlPct: 0,
               liquidationPrice: liqPrice,
               tag: order.tag,
               entryScreenshot: screenshot,
+              status: 'OPEN',
             };
           });
         } else {
@@ -474,6 +487,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
 
         const journalRecord: ReplayTradeJournalItem = {
           id: 'trade_' + Date.now(),
+          positionId: prevPos.id,
           symbol: prevPos.symbol,
           exchange,
           marketType,
@@ -488,12 +502,16 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
           leverage: prevPos.leverage,
           slPrice: prevPos.slPrice,
           tpPrice: prevPos.tpPrice,
+          pnl: netPnlUsd,
+          pnlPercentage: finalPnlPct,
           pnlUsd: netPnlUsd,
           pnlPct: finalPnlPct,
           commissionUsd: comm,
           tag: prevPos.tag || 'Replay Trade',
           screenshotUrl: screenshot,
           exitReason: trigger.reason,
+          timestamp: Date.now(),
+          createdAt: Date.now(),
         };
 
         setJournalItems((items) => [journalRecord, ...items]);
@@ -501,7 +519,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
         // Update balance
         setSettings((prevSet) => ({
           ...prevSet,
-          balance: Math.max(0, prevSet.balance + netPnlUsd),
+          balance: Math.max(0, (prevSet.balance ?? 10000) + netPnlUsd),
         }));
 
         if (trigger.reason === 'tp') {
@@ -622,8 +640,9 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
       );
 
       const margin = params.sizeUsd / params.leverage;
-      if (margin > settings.balance) {
-        showToast('danger', 'Недостатньо маржі', `Потрібно $${margin.toFixed(1)}, баланс: $${settings.balance.toFixed(1)}`);
+      const currentBal = settings.balance ?? 10000;
+      if (margin > currentBal) {
+        showToast('danger', 'Недостатньо маржі', `Потрібно $${margin.toFixed(1)}, баланс: $${currentBal.toFixed(1)}`);
         return;
       }
 
@@ -636,18 +655,24 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
         side: params.side,
         entryPrice: execPrice,
         currentPrice: execPrice,
+        size: execPrice > 0 ? params.sizeUsd / execPrice : 0,
         sizeUsd: params.sizeUsd,
+        margin,
         marginUsd: margin,
-        quantity: params.sizeUsd / execPrice,
+        quantity: execPrice > 0 ? params.sizeUsd / execPrice : 0,
         leverage: params.leverage,
         slPrice: params.slPrice,
         tpPrice: params.tpPrice,
         entryTime: currentCandle ? currentCandle.time : Math.floor(Date.now() / 1000),
+        openedAt: currentCandle ? currentCandle.time : Math.floor(Date.now() / 1000),
+        pnl: 0,
+        pnlPercentage: 0,
         unrealizedPnlUsd: 0,
         unrealizedPnlPct: 0,
         liquidationPrice: liqPrice,
         tag: params.tag,
         entryScreenshot: screenshot,
+        status: 'OPEN',
       };
 
       setPosition(newPos);
@@ -678,7 +703,9 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
         symbol,
         side: params.side,
         orderType: params.orderType,
+        type: params.orderType.toUpperCase() as any,
         price: params.price,
+        size: params.price > 0 ? params.sizeUsd / params.price : 0,
         sizeUsd: params.sizeUsd,
         leverage: params.leverage,
         slPrice: params.slPrice,
@@ -723,6 +750,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
 
     const journalRecord: ReplayTradeJournalItem = {
       id: 'trade_' + Date.now(),
+      positionId: position.id,
       symbol: position.symbol,
       exchange,
       marketType,
@@ -737,18 +765,22 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
       leverage: position.leverage,
       slPrice: position.slPrice,
       tpPrice: position.tpPrice,
+      pnl: netPnlUsd,
+      pnlPercentage: finalPnlPct,
       pnlUsd: netPnlUsd,
       pnlPct: finalPnlPct,
       commissionUsd: comm,
       tag: position.tag || 'Manual Close',
       screenshotUrl: screenshot,
       exitReason: 'manual',
+      timestamp: Date.now(),
+      createdAt: Date.now(),
     };
 
     setJournalItems((prev) => [journalRecord, ...prev]);
     setSettings((prev) => ({
       ...prev,
-      balance: Math.max(0, prev.balance + netPnlUsd),
+      balance: Math.max(0, (prev.balance ?? 10000) + netPnlUsd),
     }));
 
     setPosition(null);

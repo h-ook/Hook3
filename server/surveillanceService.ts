@@ -191,15 +191,6 @@ export function loadSurveillanceList(userId?: string): SurveillanceCoin[] {
         tradeFlowImbalance: snapshot.tradeFlow?.imbalanceRatio,
         formationName: activePattern?.name,
         formationScore: activePattern?.score,
-        marketPhase: snapshot.marketPhase?.currentPhase,
-        marketPhaseConfidence: snapshot.marketPhase?.confidence,
-        marketPhaseReasoning: snapshot.marketPhase?.reasoning,
-        nextLikelyState: snapshot.marketPhase?.nextLikelyState,
-        dataHealthStatus: snapshot.dataHealth?.status,
-        invalidationPrice: activeSetup?.invalidationPrice,
-        targetPrice: activeSetup?.targetPrice,
-        targets: activeSetup?.targets,
-        waitingFor: activeSetup?.waitingFor,
         lastCalculated: snapshot.lastAnalysisTimestamp || Date.now(),
         recentEvents: dedupedEvents,
         lastEvent: dedupedEvents[0] || coin.state.lastEvent,
@@ -536,7 +527,7 @@ export function formatSurveillanceTelegramMessage(
     bar_close_15m: 'Закриття 15m',
     realtime: 'Realtime',
   };
-  const modeLabel = modes.map((m) => modeLabelsMap[m] || m).join(', ');
+  const modeLabel = modes.map((m: any) => modeLabelsMap[m] || m).join(', ');
 
   const exchangeUrl =
     coin.exchange === 'binance'

@@ -113,7 +113,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
 
   // Margin required for current order size & leverage
   const requiredMargin = leverage > 0 ? positionSizeUsd / leverage : positionSizeUsd;
-  const availableBalance = settings.balance;
+  const availableBalance = settings.balance ?? 10000;
 
   // Calculate target prices based on side
   const calculateTargets = (side: 'long' | 'short') => {
@@ -161,7 +161,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
       const { slPrice, tpPrice } = calculateTargets('long');
       onPlacePendingOrder({
         side: 'buy',
-        orderType,
+        orderType: orderType === 'stop' ? 'stop' : 'limit',
         price: targetPrice,
         sizeUsd: positionSizeUsd,
         leverage,
@@ -190,7 +190,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
       const { slPrice, tpPrice } = calculateTargets('short');
       onPlacePendingOrder({
         side: 'sell',
-        orderType,
+        orderType: orderType === 'stop' ? 'stop' : 'limit',
         price: targetPrice,
         sizeUsd: positionSizeUsd,
         leverage,

@@ -65,6 +65,7 @@ export class CoinWorker {
   public change24h = 0;
   public volume24hUsd = 0;
   public lastAnalysisTimestamp = 0;
+  private analysisInFlight = false;
 
   private structures: Record<Timeframe, TimeframeStructure> = {} as any;
   private levelZones: LevelZone[] = [];
@@ -74,7 +75,7 @@ export class CoinWorker {
   private recentEvents: EngineAlertEvent[] = [];
 
   constructor(
-    public coin: SurveillanceCoin,
+    public readonly coin: SurveillanceCoin,
     private macroEngine: MacroAndNewsEngine,
     private alertManager: StateMachineAndAlerts
   ) {
@@ -86,38 +87,6 @@ export class CoinWorker {
     this.setupEngine = new SetupEngine();
 
     this.init();
-  }
-
-  /**
-   * Hot Configuration Update
-   * Allows modifying settings, cooldowns, trigger modes, or disabling/enabling
-   * the coin in real-time without restarting the server or creating orphan workers.
-   */
-  public updateConfig(newCoin: SurveillanceCoin): void {
-    const prev = this.coin;
-    this.coin = newCoin;
-
-    // If coin is deactivated, stop analysis immediately
-    if (!newCoin.isActive) {
-      console.log(`[CoinWorker #${newCoin.symbol}] Coin deactivated via config update. Halting worker activity.`);
-      this.destroy();
-      return;
-    }
-
-    // If market, exchange or symbol changed, reconnect streams
-    if (
-      prev.symbol !== newCoin.symbol ||
-      prev.exchange !== newCoin.exchange ||
-      prev.marketType !== newCoin.marketType
-    ) {
-      console.log(`[CoinWorker] Reconnecting stream for ${newCoin.symbol} due to exchange/market changes`);
-      this.streamClient.destroy();
-      this.orderBookEngine.clear();
-      this.streamClient = new ExchangeStreamClient(newCoin.symbol, newCoin.exchange, newCoin.marketType);
-      this.orderBookEngine = new OrderBookEngine(newCoin.symbol, newCoin.exchange, newCoin.marketType);
-      this.setupStreamListeners();
-      this.loadInitialHistory();
-    }
   }
 
   private async init() {
@@ -208,8 +177,10 @@ export class CoinWorker {
   }
 
   public async runDeepAnalysis() {
-    if (this.isDestroyed || this.currentPrice <= 0) return;
+    if (this.isDestroyed || this.currentPrice <= 0 || this.analysisInFlight) return;
+    this.analysisInFlight = true;
     this.lastAnalysisTimestamp = Date.now();
+    try {
 
     const price = this.currentPrice;
     const candles1d = this.mtfEngine.getCandles('1d');
@@ -358,6 +329,9 @@ export class CoinWorker {
           });
         }
       }
+    }
+    } finally {
+      this.analysisInFlight = false;
     }
   }
 

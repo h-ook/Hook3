@@ -465,7 +465,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
         lineWidth: 1,
         lineStyle: LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `${order.orderType.toUpperCase()} ${order.side.toUpperCase()}: ${formatCryptoPrice(order.price)}`,
+        title: `${(order.orderType || order.type || 'LIMIT').toUpperCase()} ${order.side.toUpperCase()}: ${formatCryptoPrice(order.price)}`,
       });
       pendingLinesRef.current.push(line);
     }

@@ -540,9 +540,10 @@ export async function checkAlertsOnce() {
   // Group by unique (exchange, market, symbol)
   const uniqueKeys = new Map<string, { exchange: ExchangeId; market: MarketType; symbol: string }>();
   for (const a of activeAlerts) {
-    const key = `${a.exchange}:${a.marketType}:${a.symbol}`;
+    const market = a.marketType || 'futures';
+    const key = `${a.exchange}:${market}:${a.symbol}`;
     if (!uniqueKeys.has(key)) {
-      uniqueKeys.set(key, { exchange: a.exchange, market: a.marketType, symbol: a.symbol });
+      uniqueKeys.set(key, { exchange: a.exchange, market, symbol: a.symbol });
     }
   }
 
@@ -560,7 +561,8 @@ export async function checkAlertsOnce() {
   let updated = false;
 
   for (const alert of activeAlerts) {
-    const key = `${alert.exchange}:${alert.marketType}:${alert.symbol}`;
+    const market = alert.marketType || 'futures';
+    const key = `${alert.exchange}:${market}:${alert.symbol}`;
     const currentPrice = priceMap.get(key);
     if (currentPrice === undefined) continue;
 
@@ -598,7 +600,7 @@ export async function checkAlertsOnce() {
       const safeNote = alert.note ? escapeHtml(alert.note) : '';
 
       const message = `🚨 <b>SIGNALHOOK: СПОВІЩЕННЯ ЦІНИ!</b>\n\n` +
-        `🪙 <b>${safeSymbol}</b> (${alert.exchange.toUpperCase()} ${alert.marketType.toUpperCase()})\n` +
+        `🪙 <b>${safeSymbol}</b> (${alert.exchange.toUpperCase()} ${(alert.marketType || 'futures').toUpperCase()})\n` +
         `💵 <b>Поточна ціна:</b> $${formatPrice(currentPrice)}\n` +
         `🎯 <b>Ціль сповіщення:</b> $${formatPrice(alert.targetPrice)}\n` +
         `📊 <b>Умова:</b> ${conditionLabel}\n` +

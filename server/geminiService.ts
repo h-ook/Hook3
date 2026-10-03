@@ -82,7 +82,7 @@ ${recentCandles.slice(-5).map((c, i) => `Свічка ${i + 1}: O:${c.open.toFix
   const isBullish = formation.bias === 'bullish';
   const entry = formation.levels.entryPrice || currentPrice;
   const target = formation.levels.targetPrice;
-  const stop = formation.levels.stopLossPrice;
+  const stop = formation.levels.stopLossPrice ?? (isBullish ? entry * 0.98 : entry * 1.02);
   const tp1 = isBullish ? entry + (target - entry) * 0.5 : entry - (entry - target) * 0.5;
 
   return {

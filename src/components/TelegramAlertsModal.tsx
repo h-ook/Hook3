@@ -153,7 +153,7 @@ export const TelegramAlertsModal: React.FC<TelegramAlertsModalProps> = ({
             body: JSON.stringify({ botToken: localToken, chatId: localChatId, userId: user?.uid }),
           }).then((r) => r.json()).then((syncData) => {
             if (syncData.success) {
-              setTgStatus(prev => prev ? { ...prev, isConfigured: true, botUsername: syncData.botUsername } : null);
+              setTgStatus((prev: any) => prev ? { ...prev, isConfigured: true, botUsername: syncData.botUsername } : null);
             }
           }).catch(() => {});
         }
@@ -1258,7 +1258,7 @@ export const TelegramAlertsModal: React.FC<TelegramAlertsModalProps> = ({
                     const isGte = item.condition === 'gte';
                     const isSent = Boolean(item.telegramSent || item.telegramStatus === 'sent');
                     const isReactivating = reactivatingId === item.id;
-                    const dateStr = new Date(item.triggeredAt).toLocaleString('uk-UA', {
+                    const dateStr = new Date(item.triggeredAt || Date.now()).toLocaleString('uk-UA', {
                       day: 'numeric',
                       month: 'short',
                       hour: '2-digit',

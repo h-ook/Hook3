@@ -1,16 +1,34 @@
 import fs from 'fs';
 import path from 'path';
 
-interface TelegramConfigFile {
+export interface TelegramConfigFile {
   botToken?: string;
   chatId?: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'server', 'data');
-const CONFIG_FILE = path.join(DATA_DIR, 'telegram_config.json');
+export interface UserTelegramData {
+  botToken?: string;
+  chatId?: string;
+  updatedAt?: string;
+}
 
-let memoryConfig: TelegramConfigFile = {};
-let isConfigLoaded = false;
+export interface EffectiveTelegramConfig {
+  botToken: string;
+  chatId: string;
+  source: 'user' | 'env' | 'global' | 'none';
+  hasEnvToken: boolean;
+  hasEnvChatId: boolean;
+}
+
+const DATA_DIR = path.join(process.cwd(), 'server', 'data');
+const GLOBAL_CONFIG_FILE = path.join(DATA_DIR, 'telegram_config.json');
+const USER_TELEGRAM_FILE = path.join(DATA_DIR, 'user_telegram.json');
+
+let globalMemoryConfig: TelegramConfigFile = {};
+let isGlobalConfigLoaded = false;
+
+let userTelegramMap = new Map<string, UserTelegramData>();
+let isUserTelegramLoaded = false;
 
 // Ensure data directory exists
 function ensureDataDir() {
@@ -23,25 +41,72 @@ function ensureDataDir() {
   }
 }
 
-// Load saved config
+// --- User-Scoped Telegram Persistence ---
+// Keeps each user's credentials isolated in server/data/user_telegram.json
+export function loadUserTelegram(): Map<string, UserTelegramData> {
+  if (isUserTelegramLoaded) return userTelegramMap;
+  try {
+    ensureDataDir();
+    if (fs.existsSync(USER_TELEGRAM_FILE)) {
+      const raw = fs.readFileSync(USER_TELEGRAM_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        userTelegramMap = new Map(Object.entries(parsed));
+      }
+    }
+  } catch (err) {
+    console.error('Failed to read user_telegram.json:', err);
+  }
+  isUserTelegramLoaded = true;
+  return userTelegramMap;
+}
+
+export function saveUserTelegram(userId: string, creds: { botToken?: string; chatId?: string }): void {
+  if (!userId || userId === 'guest') return;
+  loadUserTelegram();
+  const existing = userTelegramMap.get(userId) || {};
+  const updated: UserTelegramData = {
+    botToken: creds.botToken && creds.botToken.trim() ? creds.botToken.trim() : existing.botToken,
+    chatId: creds.chatId && creds.chatId.trim() ? creds.chatId.trim() : existing.chatId,
+    updatedAt: new Date().toISOString(),
+  };
+  userTelegramMap.set(userId, updated);
+  try {
+    ensureDataDir();
+    const obj = Object.fromEntries(userTelegramMap.entries());
+    fs.writeFileSync(USER_TELEGRAM_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+    console.log(`[Telegram] User-scoped credentials updated for user: ${userId}`);
+  } catch (err) {
+    console.error('Failed to save user_telegram.json:', err);
+  }
+}
+
+export function getUserTelegram(userId?: string): UserTelegramData | undefined {
+  if (!userId || userId === 'guest') return undefined;
+  loadUserTelegram();
+  return userTelegramMap.get(userId);
+}
+
+// --- Global / System Telegram Persistence (Legacy / Fallback) ---
+// Used only for system-wide fallback or unauthenticated / guest alerts.
+// MUST NOT be overwritten when an authenticated user saves their private credentials.
 function loadSavedConfig(): TelegramConfigFile {
-  if (isConfigLoaded && (memoryConfig.botToken || memoryConfig.chatId)) {
-    return memoryConfig;
+  if (isGlobalConfigLoaded && (globalMemoryConfig.botToken || globalMemoryConfig.chatId)) {
+    return globalMemoryConfig;
   }
   try {
     ensureDataDir();
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      memoryConfig = JSON.parse(raw);
+    if (fs.existsSync(GLOBAL_CONFIG_FILE)) {
+      const raw = fs.readFileSync(GLOBAL_CONFIG_FILE, 'utf-8');
+      globalMemoryConfig = JSON.parse(raw);
     }
   } catch (err) {
     console.error('Failed to read telegram_config.json:', err);
   }
-  isConfigLoaded = true;
-  return memoryConfig;
+  isGlobalConfigLoaded = true;
+  return globalMemoryConfig;
 }
 
-// Save config to file and memory
 export function saveTelegramConfig(config: TelegramConfigFile): boolean {
   try {
     ensureDataDir();
@@ -50,10 +115,10 @@ export function saveTelegramConfig(config: TelegramConfigFile): boolean {
       botToken: config.botToken && config.botToken.trim() !== '' ? config.botToken.trim() : existing.botToken,
       chatId: config.chatId && config.chatId.trim() !== '' ? config.chatId.trim() : existing.chatId,
     };
-    memoryConfig = updated;
-    isConfigLoaded = true;
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2), 'utf-8');
-    console.log('[Telegram] Configuration updated and saved. BotToken present:', Boolean(updated.botToken), 'ChatId:', updated.chatId);
+    globalMemoryConfig = updated;
+    isGlobalConfigLoaded = true;
+    fs.writeFileSync(GLOBAL_CONFIG_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+    console.log('[Telegram] Global system config updated.');
     return true;
   } catch (err) {
     console.error('Failed to save telegram_config.json:', err);
@@ -61,20 +126,70 @@ export function saveTelegramConfig(config: TelegramConfigFile): boolean {
   }
 }
 
-// Get effective Telegram credentials
-export function getEffectiveTelegramConfig(): { botToken: string; chatId: string; hasEnvToken: boolean; hasEnvChatId: boolean } {
-  const saved = loadSavedConfig();
+/**
+ * Single Unified Telegram Configuration Layer
+ *
+ * Priority order:
+ * 1. User-scoped configuration (if userId is provided and has credentials)
+ * 2. Environment variables (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+ * 3. Global system configuration (telegram_config.json)
+ *
+ * This completely prevents User A's credentials from overwriting User B's,
+ * while allowing Price Alerts, Surveillance, CRON, and manual tests to use
+ * the exact same configuration resolver.
+ */
+export function getEffectiveTelegramConfig(userId?: string): EffectiveTelegramConfig {
   const envToken = process.env.TELEGRAM_BOT_TOKEN?.trim() || '';
   const envChatId = process.env.TELEGRAM_CHAT_ID?.trim() || '';
+  const hasEnvToken = Boolean(envToken);
+  const hasEnvChatId = Boolean(envChatId);
 
-  const botToken = saved.botToken?.trim() || envToken;
-  const chatId = saved.chatId?.trim() || envChatId;
+  // 1. Check User-scoped credentials
+  if (userId && userId !== 'guest') {
+    const userTg = getUserTelegram(userId);
+    if (userTg?.botToken && userTg?.chatId) {
+      return {
+        botToken: userTg.botToken.trim(),
+        chatId: userTg.chatId.trim(),
+        source: 'user',
+        hasEnvToken,
+        hasEnvChatId,
+      };
+    }
+  }
+
+  // 2. Check Environment variables
+  if (envToken && envChatId) {
+    return {
+      botToken: envToken,
+      chatId: envChatId,
+      source: 'env',
+      hasEnvToken,
+      hasEnvChatId,
+    };
+  }
+
+  // 3. Check Global configuration fallback
+  const globalSaved = loadSavedConfig();
+  const globalToken = globalSaved.botToken?.trim() || envToken;
+  const globalChat = globalSaved.chatId?.trim() || envChatId;
+
+  if (globalToken && globalChat) {
+    return {
+      botToken: globalToken,
+      chatId: globalChat,
+      source: 'global',
+      hasEnvToken,
+      hasEnvChatId,
+    };
+  }
 
   return {
-    botToken,
-    chatId,
-    hasEnvToken: Boolean(envToken),
-    hasEnvChatId: Boolean(envChatId),
+    botToken: globalToken || '',
+    chatId: globalChat || '',
+    source: 'none',
+    hasEnvToken,
+    hasEnvChatId,
   };
 }
 
@@ -274,12 +389,13 @@ export async function detectChatIdFromUpdates(token?: string): Promise<{
   }
 }
 
-// Test Telegram notification & auto-save on success
+// Test Telegram notification & auto-save on success (scoped to user if userId provided)
 export async function testTelegramConnection(
   token?: string,
-  chatId?: string
+  chatId?: string,
+  userId?: string
 ): Promise<{ success: boolean; botUsername?: string; error?: string }> {
-  const config = getEffectiveTelegramConfig();
+  const config = getEffectiveTelegramConfig(userId);
   const activeToken = token?.trim() || config.botToken;
   const activeChatId = chatId?.trim() || config.chatId;
 
@@ -320,8 +436,12 @@ export async function testTelegramConnection(
   });
 
   if (sendResult.success) {
-    // Auto-save working credentials so the user never loses them!
-    saveTelegramConfig({ botToken: activeToken, chatId: activeChatId });
+    // Auto-save working credentials strictly scoped to user or global fallback
+    if (userId && userId !== 'guest') {
+      saveUserTelegram(userId, { botToken: activeToken, chatId: activeChatId });
+    } else {
+      saveTelegramConfig({ botToken: activeToken, chatId: activeChatId });
+    }
     return { success: true, botUsername: botInfo.username };
   }
 

@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { ExchangeId, MarketType } from '../../src/types';
-import { DataHealth, OrderBookStatus } from './types';
+import { OrderBookStatus } from './types';
 
 export interface RawTradeEvent {
   price: number;
@@ -30,14 +30,6 @@ export class ExchangeStreamClient extends EventEmitter {
 
   public status: OrderBookStatus = 'CONNECTING';
   public lastDataReceivedAt = 0;
-  public lastPriceUpdate = 0;
-  public lastOrderbookUpdate = 0;
-  public lastTradeUpdate = 0;
-  public lastOIUpdate = 0;
-  public latencyMs = 0;
-
-  // Bybit sequence checking
-  private lastBybitSeq = 0;
 
   constructor(
     public readonly symbol: string,
@@ -54,17 +46,32 @@ export class ExchangeStreamClient extends EventEmitter {
   }
 
   /**
-   * Proper WebSocket URL for Binance and Bybit.
-   * Binance uses /stream?streams=... for reliable multiplexed streams.
+   * Correct WebSocket endpoint formatting:
+   * Binance multiplex streams:
+   * - Futures: wss://fstream.binance.com/stream?streams=<s1>/<s2>/<s3>
+   * - Spot: wss://stream.binance.com:9443/stream?streams=<s1>/<s2>/<s3>
+   * Bybit v5 public:
+   * - Futures: wss://stream.bybit.com/v5/public/linear
+   * - Spot: wss://stream.bybit.com/v5/public/spot
    */
   private getWebSocketUrl(): string {
     const sym = this.cleanSymbol();
     if (this.exchange === 'binance') {
       const lower = sym.toLowerCase();
       if (this.marketType === 'futures') {
-        return `wss://fstream.binance.com/stream?streams=${lower}@ticker/${lower}@aggTrade/${lower}@depth20@100ms`;
+        const streams = [
+          `${lower}@ticker`,
+          `${lower}@aggTrade`,
+          `${lower}@depth20@100ms`,
+        ].join('/');
+        return `wss://fstream.binance.com/stream?streams=${streams}`;
       } else {
-        return `wss://stream.binance.com:9443/stream?streams=${lower}@ticker/${lower}@trade/${lower}@depth20@100ms`;
+        const streams = [
+          `${lower}@ticker`,
+          `${lower}@trade`,
+          `${lower}@depth20@100ms`,
+        ].join('/');
+        return `wss://stream.binance.com:9443/stream?streams=${streams}`;
       }
     } else {
       // Bybit
@@ -81,39 +88,6 @@ export class ExchangeStreamClient extends EventEmitter {
       this.status = newStatus;
       this.emit('status', newStatus);
     }
-  }
-
-  public getDataHealth(): DataHealth {
-    const now = Date.now();
-    const priceFresh = this.lastPriceUpdate > 0 && now - this.lastPriceUpdate < 15000;
-    const orderbookFresh = this.lastOrderbookUpdate > 0 && now - this.lastOrderbookUpdate < 15000;
-    const tradesFresh = this.lastTradeUpdate > 0 && now - this.lastTradeUpdate < 60000; // trades can be slow on quiet pairs
-    const oiFresh = this.lastOIUpdate > 0 && now - this.lastOIUpdate < 60000;
-
-    let healthStatus: DataHealth['status'] = 'LIVE';
-    if (this.status === 'ERROR') {
-      healthStatus = 'ERROR';
-    } else if (this.status === 'CONNECTING' || this.status === 'SYNCING') {
-      healthStatus = this.status;
-    } else if (!priceFresh || !orderbookFresh) {
-      healthStatus = 'STALE';
-    } else if (!tradesFresh) {
-      healthStatus = 'DEGRADED';
-    }
-
-    return {
-      status: healthStatus,
-      priceFresh,
-      orderbookFresh,
-      tradesFresh,
-      oiFresh,
-      candlesFresh: true,
-      latencyMs: this.latencyMs,
-      lastPriceUpdate: this.lastPriceUpdate,
-      lastOrderbookUpdate: this.lastOrderbookUpdate,
-      lastTradeUpdate: this.lastTradeUpdate,
-      lastOIUpdate: this.lastOIUpdate,
-    };
   }
 
   public connect() {
@@ -134,14 +108,16 @@ export class ExchangeStreamClient extends EventEmitter {
         this.setStatus('SYNCING');
         this.lastDataReceivedAt = Date.now();
 
-        // If Bybit, send subscription payload and start ping interval
+        // If Bybit, send subscription payload and start heartbeat ping
         if (this.exchange === 'bybit') {
           const sym = this.cleanSymbol();
           const subscribeMsg = {
             op: 'subscribe',
             args: [`tickers.${sym}`, `publicTrade.${sym}`, `orderbook.50.${sym}`],
           };
-          this.ws?.send(JSON.stringify(subscribeMsg));
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(subscribeMsg));
+          }
 
           // Bybit heartbeat ping every 20 seconds
           this.pingInterval = setInterval(() => {
@@ -149,115 +125,135 @@ export class ExchangeStreamClient extends EventEmitter {
               this.ws.send(JSON.stringify({ op: 'ping' }));
             }
           }, 20000);
+        } else {
+          // Binance ping interval: actively keep TCP connection alive
+          this.pingInterval = setInterval(() => {
+            if (this.ws?.readyState === WebSocket.OPEN) {
+              try {
+                this.ws.ping();
+              } catch {}
+            }
+          }, 25000);
         }
+      });
+
+      this.ws.on('ping', (data) => {
+        if (this.isDestroyed) return;
+        this.lastDataReceivedAt = Date.now();
+        try {
+          this.ws?.pong(data);
+        } catch {}
+      });
+
+      this.ws.on('pong', () => {
+        if (this.isDestroyed) return;
+        this.lastDataReceivedAt = Date.now();
       });
 
       this.ws.on('message', (data: WebSocket.Data) => {
         if (this.isDestroyed) return;
-        const now = Date.now();
-        this.lastDataReceivedAt = now;
+        this.lastDataReceivedAt = Date.now();
         try {
           const str = data.toString();
           const json = JSON.parse(str);
-          this.handleIncomingMessage(json, now);
+          this.handleIncomingMessage(json);
         } catch (e) {
-          // ignore invalid json
+          // Ignore invalid JSON frames
         }
       });
 
       this.ws.on('error', (err) => {
         if (this.isDestroyed) return;
         this.setStatus('ERROR');
+        console.warn(`[exchangeStream ${this.symbol} (${this.exchange})] Socket error: ${err.message}`);
         this.emit('error', err);
       });
 
-      this.ws.on('close', () => {
+      this.ws.on('close', (code, reason) => {
         if (this.isDestroyed) return;
+        const reasonStr = reason ? reason.toString() : 'None';
+        console.log(`[exchangeStream ${this.symbol} (${this.exchange})] Socket closed (code: ${code}, reason: ${reasonStr}). Scheduling reconnect...`);
         this.setStatus('STALE');
-        this.scheduleReconnect();
+        this.scheduleReconnect(`close_code_${code}`);
       });
-    } catch (e) {
+    } catch (e: any) {
       this.setStatus('ERROR');
-      this.scheduleReconnect();
+      console.error(`[exchangeStream ${this.symbol} (${this.exchange})] Connect exception: ${e?.message}`);
+      this.scheduleReconnect('connect_exception');
     }
   }
 
-  private handleIncomingMessage(raw: any, receiveTime: number) {
-    // If Binance combined stream format: { stream: '...', data: { ... } }
-    const msg = raw.data !== undefined && raw.stream !== undefined ? raw.data : raw;
-
+  private handleIncomingMessage(msg: any) {
     if (this.exchange === 'binance') {
-      this.handleBinanceMessage(msg, receiveTime);
+      this.handleBinanceMessage(msg);
     } else {
-      this.handleBybitMessage(raw, receiveTime);
+      this.handleBybitMessage(msg);
     }
   }
 
-  private handleBinanceMessage(msg: any, receiveTime: number) {
-    const eventType = msg.e;
+  private handleBinanceMessage(msg: any) {
+    // In Binance combined streams (/stream?streams=...), payload is wrapped in { stream: string, data: any }
+    const raw = (msg && msg.data) ? msg.data : msg;
+    if (!raw) return;
 
-    // Ticker stream (24hrTicker)
-    if (eventType === '24hrTicker' || (msg.s && msg.c !== undefined)) {
-      const price = parseFloat(msg.c);
-      const high24h = parseFloat(msg.h || 0);
-      const low24h = parseFloat(msg.l || 0);
-      const volume24hUsd = parseFloat(msg.q || 0);
+    const eventType = raw.e;
 
-      if (msg.E) {
-        this.latencyMs = Math.max(0, receiveTime - msg.E);
-      }
-      this.lastPriceUpdate = receiveTime;
-
+    // 1. Ticker stream (24hr ticker)
+    if (eventType === '24hrTicker' || (raw.s && raw.c !== undefined)) {
+      const price = parseFloat(raw.c);
+      const high24h = parseFloat(raw.h || 0);
+      const low24h = parseFloat(raw.l || 0);
+      const volume24hUsd = parseFloat(raw.q || 0);
       if (!isNaN(price) && price > 0) {
         this.emit('price', {
           price,
           high24h,
           low24h,
           volume24hUsd,
-          time: msg.E || receiveTime,
+          time: raw.E || Date.now(),
         });
       }
     }
 
-    // Trade stream (trade or aggTrade)
+    // 2. Trade stream (trade or aggTrade)
     if (eventType === 'trade' || eventType === 'aggTrade') {
-      const price = parseFloat(msg.p);
-      const quantity = parseFloat(msg.q);
-      const isBuyerMaker = Boolean(msg.m);
+      const price = parseFloat(raw.p);
+      const quantity = parseFloat(raw.q);
+      const isBuyerMaker = Boolean(raw.m);
+      // If buyer is maker, taker is seller -> aggressive SELL. If buyer is taker -> aggressive BUY.
       const side: 'BUY' | 'SELL' = isBuyerMaker ? 'SELL' : 'BUY';
-
-      this.lastTradeUpdate = receiveTime;
 
       if (!isNaN(price) && price > 0 && !isNaN(quantity) && quantity > 0) {
         const tradeEvent: RawTradeEvent = {
           price,
           quantity,
           side,
-          time: msg.T || msg.E || receiveTime,
+          time: raw.T || raw.E || Date.now(),
           isBuyerMaker,
         };
         this.emit('trade', tradeEvent);
       }
     }
 
-    // Depth stream (depth20)
-    if (msg.bids && msg.asks) {
+    // 3. Depth stream (depth20@100ms or partial book depth)
+    // Supports both { bids: [], asks: [] } and { b: [], a: [] } formats
+    const bidsRaw = raw.bids || raw.b;
+    const asksRaw = raw.asks || raw.a;
+
+    if (Array.isArray(bidsRaw) && Array.isArray(asksRaw)) {
       this.setStatus('LIVE');
-      this.lastOrderbookUpdate = receiveTime;
-
-      const bids: [number, number][] = msg.bids.map((b: any) => [parseFloat(b[0]), parseFloat(b[1])]);
-      const asks: [number, number][] = msg.asks.map((a: any) => [parseFloat(a[0]), parseFloat(a[1])]);
-
+      const bids: [number, number][] = bidsRaw.map((b: any) => [parseFloat(b[0]), parseFloat(b[1])]);
+      const asks: [number, number][] = asksRaw.map((a: any) => [parseFloat(a[0]), parseFloat(a[1])]);
       this.emit('depth', {
         bids,
         asks,
         isSnapshot: true,
-        sequence: msg.lastUpdateId || receiveTime,
+        sequence: raw.lastUpdateId || raw.u || Date.now(),
       } as RawDepthDelta);
     }
   }
 
-  private handleBybitMessage(msg: any, receiveTime: number) {
+  private handleBybitMessage(msg: any) {
     if (msg.op === 'pong' || msg.ret_msg === 'pong') {
       return;
     }
@@ -272,19 +268,13 @@ export class ExchangeStreamClient extends EventEmitter {
         const high24h = parseFloat(data.highPrice24h || 0);
         const low24h = parseFloat(data.lowPrice24h || 0);
         const volume24hUsd = parseFloat(data.turnover24h || 0);
-
-        if (msg.ts) {
-          this.latencyMs = Math.max(0, receiveTime - msg.ts);
-        }
-        this.lastPriceUpdate = receiveTime;
-
         if (!isNaN(lastPrice) && lastPrice > 0) {
           this.emit('price', {
             price: lastPrice,
             high24h,
             low24h,
             volume24hUsd,
-            time: msg.ts || receiveTime,
+            time: msg.ts || Date.now(),
           });
         }
       }
@@ -293,8 +283,6 @@ export class ExchangeStreamClient extends EventEmitter {
     // Public trades
     if (topic.startsWith('publicTrade.')) {
       const tradeList = Array.isArray(msg.data) ? msg.data : [msg.data];
-      this.lastTradeUpdate = receiveTime;
-
       for (const t of tradeList) {
         if (!t) continue;
         const price = parseFloat(t.p);
@@ -305,7 +293,7 @@ export class ExchangeStreamClient extends EventEmitter {
             price,
             quantity,
             side,
-            time: t.T || msg.ts || receiveTime,
+            time: t.T || msg.ts || Date.now(),
             isBuyerMaker: side === 'SELL',
           } as RawTradeEvent);
         }
@@ -318,29 +306,13 @@ export class ExchangeStreamClient extends EventEmitter {
       const data = msg.data;
       if (data && (data.b || data.a)) {
         this.setStatus('LIVE');
-        this.lastOrderbookUpdate = receiveTime;
-
-        const currentSeq = data.seq || data.u || receiveTime;
-
-        // Sequence validation for Bybit
-        if (type === 'snapshot') {
-          this.lastBybitSeq = currentSeq;
-        } else if (type === 'delta') {
-          // If we see an impossible backwards sequence or massive gap, signal resync
-          if (this.lastBybitSeq > 0 && currentSeq < this.lastBybitSeq) {
-            console.warn(`[Bybit OB] Sequence out of order for ${this.symbol}: expected >= ${this.lastBybitSeq}, got ${currentSeq}`);
-          }
-          this.lastBybitSeq = currentSeq;
-        }
-
         const bids: [number, number][] = (data.b || []).map((b: any) => [parseFloat(b[0]), parseFloat(b[1])]);
         const asks: [number, number][] = (data.a || []).map((a: any) => [parseFloat(a[0]), parseFloat(a[1])]);
-
         this.emit('depth', {
           bids,
           asks,
           isSnapshot: type === 'snapshot',
-          sequence: currentSeq,
+          sequence: msg.data?.seq || msg.data?.u || Date.now(),
         } as RawDepthDelta);
       }
     }
@@ -352,24 +324,25 @@ export class ExchangeStreamClient extends EventEmitter {
       const now = Date.now();
       const elapsed = now - this.lastDataReceivedAt;
 
-      // Watchdog: If no message for > 15 seconds, consider STALE and trigger reconnect
-      if (this.status === 'LIVE' && elapsed > 15000) {
+      // Watchdog: If no message for > 15 seconds after having been LIVE or SYNCING, trigger reconnect
+      if ((this.status === 'LIVE' || this.status === 'SYNCING') && elapsed > 15000) {
         this.setStatus('STALE');
-        console.warn(`[Watchdog] Stale stream detected for ${this.symbol} (${this.exchange}) - reconnecting`);
-        this.scheduleReconnect();
+        console.warn(`[Watchdog] Stale stream detected for ${this.symbol} (${this.exchange}) - no data for ${Math.round(elapsed / 1000)}s. Reconnecting...`);
+        this.scheduleReconnect('watchdog_stale_data_timeout');
       }
-    }, 4000);
+    }, 5000);
   }
 
-  public recordOIUpdated(timestamp = Date.now()) {
-    this.lastOIUpdate = timestamp;
-  }
-
-  private scheduleReconnect() {
+  private scheduleReconnect(reason = 'unknown') {
     if (this.isDestroyed || this.reconnectTimeout) return;
     const backoffIndex = Math.min(this.reconnectAttempts, this.backoffSchedule.length - 1);
-    const delay = this.backoffSchedule[backoffIndex];
+    const baseDelay = this.backoffSchedule[backoffIndex];
+    // Add jitter (up to 30% randomness) to prevent thundering herd
+    const jitter = Math.floor(Math.random() * (baseDelay * 0.3));
+    const delay = baseDelay + jitter;
     this.reconnectAttempts++;
+
+    console.log(`[exchangeStream ${this.symbol} (${this.exchange})] Reconnecting in ${delay}ms (attempt #${this.reconnectAttempts}, reason: ${reason})`);
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
@@ -377,12 +350,6 @@ export class ExchangeStreamClient extends EventEmitter {
         this.connect();
       }
     }, delay);
-  }
-
-  public resync() {
-    this.cleanupSocket();
-    this.reconnectAttempts = 0;
-    this.connect();
   }
 
   private cleanupSocket() {
@@ -393,7 +360,9 @@ export class ExchangeStreamClient extends EventEmitter {
     if (this.ws) {
       try {
         this.ws.removeAllListeners();
-        this.ws.close();
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.terminate();
+        }
       } catch (e) {}
       this.ws = null;
     }
@@ -411,5 +380,6 @@ export class ExchangeStreamClient extends EventEmitter {
     }
     this.cleanupSocket();
     this.removeAllListeners();
+    console.log(`[exchangeStream ${this.symbol} (${this.exchange})] Destroyed cleanly.`);
   }
 }

@@ -8,7 +8,12 @@ export class LevelsAndFormationsEngine {
 
   public findSupportResistanceZones(candles1d: Kline[], candles4h: Kline[], candles1h: Kline[]): LevelZone[] {
     const zones: LevelZone[] = [];
-    const closed = (candles: Kline[], tfMs: number) => candles.length > 2 && candles[candles.length - 1].time >= Date.now() - tfMs ? candles.slice(0, -1) : candles;
+    const closed = (candles: Kline[], tfMs: number) => {
+      if (candles.length <= 2) return candles;
+      const t = candles[candles.length - 1].time > 2_000_000_000_000 ? candles[candles.length - 1].time : candles[candles.length - 1].time * 1000;
+      const interval = candles.length > 2 ? Math.max(1000, ((candles[candles.length - 1].time > 2_000_000_000_000 ? candles[candles.length - 1].time : candles[candles.length - 1].time * 1000) - (candles[candles.length - 2].time > 2_000_000_000_000 ? candles[candles.length - 2].time : candles[candles.length - 2].time * 1000))) : tfMs;
+      return t + Math.min(tfMs, interval) > Date.now() ? candles.slice(0, -1) : candles;
+    };
     candles1d = closed(candles1d, 24 * 60 * 60 * 1000);
     candles4h = closed(candles4h, 4 * 60 * 60 * 1000);
     candles1h = closed(candles1h, 60 * 60 * 1000);
@@ -169,7 +174,10 @@ export class LevelsAndFormationsEngine {
     // Never finalize a formation from an in-progress candle. The live candle is
     // useful for proximity/approach elsewhere, but confirmation is closed-candle only.
     const tfMs = 60 * 60 * 1000;
-    const closed = candles1h.length > 2 && candles1h[candles1h.length - 1].time >= Date.now() - tfMs
+    const lastTimeMs = candles1h.length ? (candles1h[candles1h.length - 1].time > 2_000_000_000_000 ? candles1h[candles1h.length - 1].time : candles1h[candles1h.length - 1].time * 1000) : 0;
+    const prevTimeMs = candles1h.length > 1 ? (candles1h[candles1h.length - 2].time > 2_000_000_000_000 ? candles1h[candles1h.length - 2].time : candles1h[candles1h.length - 2].time * 1000) : 0;
+    const intervalMs = Math.max(1000, lastTimeMs - prevTimeMs || tfMs);
+    const closed = candles1h.length > 2 && lastTimeMs + Math.min(tfMs, intervalMs) > Date.now()
       ? candles1h.slice(0, -1)
       : candles1h;
     const patterns: DetectedPattern[] = [];
@@ -178,25 +186,29 @@ export class LevelsAndFormationsEngine {
     const slice = closed.slice(-40);
     const atr = calculateATR(slice);
     const closedPrice = slice[slice.length - 1].close;
-    const tolerance = Math.max(atr * 0.35, (Math.max(...slice.map(c=>c.high)) - Math.min(...slice.map(c=>c.low))) * 0.004);
+    const atrPct = closedPrice > 0 ? (atr / closedPrice) * 100 : 0;
+    const equalTolerancePct = Math.max(0.12, Math.min(2.0, atrPct * 0.35));
+    const tolerance = Math.max(atr * 0.35, closedPrice * equalTolerancePct / 100);
+    const equalToleranceRatio = equalTolerancePct / 100;
     const swings = this.findSwings(slice, 2);
     const highs = swings.filter(s=>s.type==='HIGH');
     const lows = swings.filter(s=>s.type==='LOW');
-    const maxHigh = Math.max(...slice.map(c=>c.high));
-    const minLow = Math.min(...slice.map(c=>c.low));
+    const priorSlice = slice.slice(0, -1);
+    const maxHigh = Math.max(...priorSlice.map(c=>c.high));
+    const minLow = Math.min(...priorSlice.map(c=>c.low));
     const range = Math.max(maxHigh-minLow, 0.00000001);
 
     if (lows.length >= 2) {
       const a=lows[lows.length-2], b=lows[lows.length-1];
       const diff=Math.abs(a.price-b.price)/Math.max(a.price,b.price);
       const between=highs.filter(h=>h.index>a.index && h.index<b.index);
-      if (b.index-a.index>=4 && diff<=Math.max(0.012, tolerance/a.price) && between.length) {
+      if (b.index-a.index>=4 && diff<=Math.max(equalToleranceRatio, 0.0012) && between.length) {
         const neckline=Math.max(...between.map(h=>h.price));
         const height=neckline-(a.price+b.price)/2;
         if(height/range>=0.12) {
           const breakout=closedPrice>neckline;
           const retest=breakout && closedPrice<=neckline*1.008;
-          const score=this.patternScore({symmetry:1-diff/Math.max(0.012,tolerance/a.price), depth:Math.min(1,height/(a.price*0.03)), trigger:breakout?1:0, volume:this.breakoutVolumeScore(closed, b.index, neckline, 'LONG')});
+          const score=this.patternScore({symmetry:1-diff/Math.max(equalToleranceRatio,0.0012), depth:Math.min(1,height/(a.price*0.03)), trigger:breakout?1:0, volume:this.breakoutVolumeScore(closed, b.index, neckline, 'LONG')});
           patterns.push({name:'Double Bottom',type:'Double Bottom',bias:'bullish',score,upperBoundary:neckline,lowerBoundary:Math.min(a.price,b.price),touchesUpper:1,touchesLower:2,compression:false,timeframe:'1h',status:retest||breakout?'BROKEN':'READY'});
         }
       }
@@ -206,26 +218,26 @@ export class LevelsAndFormationsEngine {
       const a=highs[highs.length-2], b=highs[highs.length-1];
       const diff=Math.abs(a.price-b.price)/Math.max(a.price,b.price);
       const between=lows.filter(l=>l.index>a.index && l.index<b.index);
-      if (b.index-a.index>=4 && diff<=Math.max(0.012,tolerance/a.price) && between.length) {
+      if (b.index-a.index>=4 && diff<=Math.max(equalToleranceRatio,0.0012) && between.length) {
         const neckline=Math.min(...between.map(l=>l.price));
         const height=(a.price+b.price)/2-neckline;
         if(height/range>=0.12) {
           const breakdown=closedPrice<neckline;
           const retest=breakdown && closedPrice>=neckline*0.992;
-          const score=this.patternScore({symmetry:1-diff/Math.max(0.012,tolerance/a.price),depth:Math.min(1,height/(a.price*0.03)),trigger:breakdown?1:0,volume:this.breakoutVolumeScore(closed,b.index,neckline,'SHORT')});
+          const score=this.patternScore({symmetry:1-diff/Math.max(equalToleranceRatio,0.0012),depth:Math.min(1,height/(a.price*0.03)),trigger:breakdown?1:0,volume:this.breakoutVolumeScore(closed,b.index,neckline,'SHORT')});
           patterns.push({name:'Double Top',type:'Double Top',bias:'bearish',score,upperBoundary:Math.max(a.price,b.price),lowerBoundary:neckline,touchesUpper:2,touchesLower:1,compression:false,timeframe:'1h',status:retest||breakdown?'BROKEN':'READY'});
         }
       }
     }
 
-    const highCluster=highs.filter(h=>Math.abs(h.price-maxHigh)/maxHigh<=Math.max(0.004,tolerance/maxHigh));
+    const highCluster=highs.filter(h=>Math.abs(h.price-maxHigh)/maxHigh<=Math.max(equalToleranceRatio,0.0015));
     const hl=lowPairs(lows).filter(([a,b])=>b.price>a.price).length;
     if(highCluster.length>=3 && hl>=2) {
       const score=this.patternScore({symmetry:1,depth:Math.min(1,hl/4),trigger:closedPrice>maxHigh?1:0,volume:this.breakoutVolumeScore(closed,closed.length-1,maxHigh,'LONG')});
       patterns.push({name:'Ascending Triangle',type:'Ascending Triangle',bias:'bullish',score,upperBoundary:maxHigh,lowerBoundary:minLow,touchesUpper:highCluster.length,touchesLower:hl+1,compression:true,timeframe:'1h',status:closedPrice>maxHigh?'BROKEN':'READY'});
     }
 
-    const lowCluster=lows.filter(l=>Math.abs(l.price-minLow)/minLow<=Math.max(0.004,tolerance/minLow));
+    const lowCluster=lows.filter(l=>Math.abs(l.price-minLow)/minLow<=Math.max(equalToleranceRatio,0.0015));
     const lh=highPairs(highs).filter(([a,b])=>b.price<a.price).length;
     if(lowCluster.length>=3 && lh>=2) {
       const score=this.patternScore({symmetry:1,depth:Math.min(1,lh/4),trigger:closedPrice<minLow?1:0,volume:this.breakoutVolumeScore(closed,closed.length-1,minLow,'SHORT')});

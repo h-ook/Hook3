@@ -14,7 +14,7 @@ export class VolumeAndOIEngine {
     }
   }
 
-  public getTradeFlowSnapshot(currentPrice = 0): TradeFlowSnapshot {
+  public getTradeFlowSnapshot(): TradeFlowSnapshot {
     let buyVolUsd = 0;
     let sellVolUsd = 0;
     let largeTrades = 0;
@@ -35,40 +35,14 @@ export class VolumeAndOIEngine {
     const totalVol = buyVolUsd + sellVolUsd;
     const avgTradeSize = totalTrades > 0 ? totalVol / totalTrades : 0;
     const imbalanceRatio = sellVolUsd > 0 ? buyVolUsd / sellVolUsd : buyVolUsd > 0 ? 99 : 1.0;
-    const deltaUsd = buyVolUsd - sellVolUsd;
-
-    // Absorption Detection (Section 24)
-    // High volume aggressive flow with minimal price displacement
-    let isAbsorption = false;
-    let absorptionType: 'SELLER_ABSORPTION' | 'BUYER_ABSORPTION' | 'NONE' = 'NONE';
-
-    if (this.recentTrades.length >= 10 && totalVol >= 150000) {
-      const firstPrice = this.recentTrades[0].price;
-      const lastPrice = this.recentTrades[this.recentTrades.length - 1].price;
-      const priceDeltaPct = Math.abs((lastPrice - firstPrice) / firstPrice) * 100;
-
-      // Heavy buying but price barely moved -> seller absorption
-      if (imbalanceRatio >= 2.0 && priceDeltaPct <= 0.08) {
-        isAbsorption = true;
-        absorptionType = 'SELLER_ABSORPTION';
-      }
-      // Heavy selling but price barely moved -> buyer absorption
-      else if (imbalanceRatio <= 0.5 && priceDeltaPct <= 0.08) {
-        isAbsorption = true;
-        absorptionType = 'BUYER_ABSORPTION';
-      }
-    }
 
     return {
       aggressiveBuyUsd: Math.round(buyVolUsd),
       aggressiveSellUsd: Math.round(sellVolUsd),
-      deltaUsd: Math.round(deltaUsd),
       imbalanceRatio: Number(imbalanceRatio.toFixed(2)),
       largeTradeCount: largeTrades,
       totalTradeCount: totalTrades,
       averageTradeSizeUsd: Math.round(avgTradeSize),
-      isAbsorption,
-      absorptionType,
       recentTradesWindowMs: 60000,
     };
   }
@@ -99,7 +73,7 @@ export class VolumeAndOIEngine {
     const now = Date.now();
     this.oiHistory.push({ time: now, valueUsd, amountCoins, price });
 
-    // Keep up to 6 hours of OI history
+    // Keep up to 6 hours of OI history (snapshot every ~10s = ~2160 items)
     const cutoff = now - 6 * 60 * 60 * 1000;
     while (this.oiHistory.length > 0 && this.oiHistory[0].time < cutoff) {
       this.oiHistory.shift();
@@ -118,7 +92,6 @@ export class VolumeAndOIEngine {
         change4hPct: 0,
         regime: 'NEUTRAL',
         isAnomaly: false,
-        velocity: 0,
       };
     }
 
@@ -127,6 +100,7 @@ export class VolumeAndOIEngine {
 
     const getChangeSince = (msAgo: number): number => {
       const targetTime = now - msAgo;
+      // find nearest snapshot
       let closest = this.oiHistory[0];
       for (const item of this.oiHistory) {
         if (Math.abs(item.time - targetTime) < Math.abs(closest.time - targetTime)) {
@@ -143,22 +117,21 @@ export class VolumeAndOIEngine {
     const change1hPct = Number(getChangeSince(60 * 60 * 1000).toFixed(2));
     const change4hPct = Number(getChangeSince(4 * 60 * 60 * 1000).toFixed(2));
 
-    // Determine OI + Price Matrix (Section 27)
+    // Determine OI + Price Regime over 15m window
     const priceChange15m = latest.price > 0 ? ((currentPrice - latest.price) / latest.price) * 100 : 0;
     let regime: 'PRICE_UP_OI_UP' | 'PRICE_UP_OI_DOWN' | 'PRICE_DOWN_OI_UP' | 'PRICE_DOWN_OI_DOWN' | 'NEUTRAL' = 'NEUTRAL';
 
-    if (priceChange15m > 0.25 && change15mPct > 0.8) {
+    if (priceChange15m > 0.3 && change15mPct > 1.0) {
       regime = 'PRICE_UP_OI_UP'; // Long buildup
-    } else if (priceChange15m > 0.25 && change15mPct < -0.8) {
-      regime = 'PRICE_UP_OI_DOWN'; // Short covering
-    } else if (priceChange15m < -0.25 && change15mPct > 0.8) {
+    } else if (priceChange15m > 0.3 && change15mPct < -1.0) {
+      regime = 'PRICE_UP_OI_DOWN'; // Short squeeze
+    } else if (priceChange15m < -0.3 && change15mPct > 1.0) {
       regime = 'PRICE_DOWN_OI_UP'; // Short buildup
-    } else if (priceChange15m < -0.25 && change15mPct < -0.8) {
+    } else if (priceChange15m < -0.3 && change15mPct < -1.0) {
       regime = 'PRICE_DOWN_OI_DOWN'; // Long liquidation flush
     }
 
-    const velocity = Number((change5mPct / 5).toFixed(3)); // % per minute
-    const isAnomaly = Math.abs(change15mPct) >= 4.0 || Math.abs(change5mPct) >= 2.5;
+    const isAnomaly = Math.abs(change15mPct) >= 5.0 || Math.abs(change5mPct) >= 3.0;
 
     return {
       currentUsd: Math.round(latest.valueUsd),
@@ -170,7 +143,62 @@ export class VolumeAndOIEngine {
       change4hPct,
       regime,
       isAnomaly,
-      velocity,
     };
+  }
+
+  public detectAnomalies(
+    rvol: number,
+    tradeFlow: TradeFlowSnapshot,
+    oiSnapshot: OISnapshot
+  ): { anomalyScore: number; isImpulse: boolean; description: string } {
+    let score = 0;
+    const reasons: string[] = [];
+
+    if (rvol >= 3.0) {
+      score += 35;
+      reasons.push(`RVOL ${rvol}x`);
+    } else if (rvol >= 2.0) {
+      score += 20;
+      reasons.push(`RVOL ${rvol}x`);
+    }
+
+    if (tradeFlow.imbalanceRatio >= 3.0 || tradeFlow.imbalanceRatio <= 0.33) {
+      score += 25;
+      reasons.push(`Торговий дисбаланс ${tradeFlow.imbalanceRatio}`);
+    }
+
+    if (tradeFlow.largeTradeCount >= 5) {
+      score += 20;
+      reasons.push(`${tradeFlow.largeTradeCount} великих ордерів >$50k`);
+    }
+
+    if (oiSnapshot.isAnomaly) {
+      score += 25;
+      reasons.push(`OI аномалія: ${oiSnapshot.change15mPct}%`);
+    }
+
+    const isImpulse = score >= 50;
+
+    return {
+      anomalyScore: Math.min(100, score),
+      isImpulse,
+      description: reasons.join(', ') || 'Нормальна активність',
+    };
+  }
+
+  public calculateRoundNumbers(currentPrice: number): { nearestAbove: number; nearestBelow: number; step: number } {
+    let step = 1000;
+    if (currentPrice > 20000) step = 1000;
+    else if (currentPrice > 5000) step = 500;
+    else if (currentPrice > 1000) step = 100;
+    else if (currentPrice > 100) step = 10;
+    else if (currentPrice > 10) step = 1;
+    else if (currentPrice > 1) step = 0.5;
+    else step = 0.05;
+
+    const nearestBelow = Math.floor(currentPrice / step) * step;
+    const nearestAbove = nearestBelow + step;
+
+    return { nearestAbove, nearestBelow, step };
   }
 }

@@ -155,7 +155,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       });
 
-      const sorted = Array.from(combinedMap.values()).sort((a, b) => b.triggeredAt - a.triggeredAt);
+      const sorted = Array.from(combinedMap.values()).sort((a, b) => (b.triggeredAt || 0) - (a.triggeredAt || 0));
       setHistory(sorted);
 
       // Backfill server items to Firestore if needed

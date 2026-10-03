@@ -215,14 +215,14 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
                 <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap hidden xl:table-cell">
                   <div className="flex items-center gap-1 text-sky-300">
                     <span className="text-[10px] text-slate-400 font-sans">Вхід:</span>
-                    <span className="font-semibold">${formatPrice(formation.levels.entryPrice)}</span>
+                    <span className="font-semibold">${formatPrice(formation.levels.entryPrice ?? 0)}</span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-[10px]">
                     <span className="text-emerald-400" title="Ціль">
-                      TP: ${formatPrice(formation.levels.targetPrice)} (+{formation.potentialProfitPct}%)
+                      TP: ${formatPrice(formation.levels.targetPrice ?? 0)} (+{formation.potentialProfitPct}%)
                     </span>
                     <span className="text-rose-400" title="Стоп-лос">
-                      SL: ${formatPrice(formation.levels.stopLossPrice)} (-{formation.potentialRiskPct}%)
+                      SL: ${formatPrice(formation.levels.stopLossPrice ?? 0)} (-{formation.potentialRiskPct}%)
                     </span>
                   </div>
                 </td>

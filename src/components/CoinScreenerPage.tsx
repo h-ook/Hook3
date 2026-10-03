@@ -106,25 +106,35 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const { user } = useAuth();
   const isGuest = !user;
   const [coins, setCoins] = useState<MarketCoin[]>(() =>
-    TOP_POPULAR_PAIRS.map((p, idx) => ({
-      symbol: p.symbol,
-      baseAsset: p.baseAsset,
-      quoteAsset: 'USDT',
-      exchange: 'binance',
-      marketType: 'futures',
-      price: idx === 0 ? 84500 : idx === 1 ? 2200 : idx === 2 ? 140 : 1.5,
-      change24h: 1.25,
-      volumeUsd: 100_000_000 - idx * 2_000_000,
-      high24h: idx === 0 ? 85500 : 2300,
-      low24h: idx === 0 ? 83500 : 2150,
-      distanceToHighPct: 1.1,
-      distanceToLowPct: 1.2,
-      volatility24hPct: 2.3,
-      isNearHigh: false,
-      isNearLow: false,
-      isActiveCoin: true,
-      exchangeUrl: `https://www.binance.com/en/futures/${p.symbol}`,
-    }))
+    TOP_POPULAR_PAIRS.map((p, idx) => {
+      const price = idx === 0 ? 84500 : idx === 1 ? 2200 : idx === 2 ? 140 : 1.5;
+      const volumeUsd = 100_000_000 - idx * 2_000_000;
+      return {
+        symbol: p.symbol,
+        baseAsset: p.baseAsset,
+        quoteAsset: 'USDT',
+        exchange: 'binance',
+        marketType: 'futures',
+        price,
+        change24h: 1.25,
+        volume24h: volumeUsd,
+        volumeUsd,
+        currentPrice: price,
+        priceChange24h: 1.25,
+        volume24hUsd: volumeUsd,
+        formations: [],
+        high24h: idx === 0 ? 85500 : 2300,
+        low24h: idx === 0 ? 83500 : 2150,
+        distanceToHighPct: 1.1,
+        distanceToLowPct: 1.2,
+        volatility24hPct: 2.3,
+        volatility5mPct: 0.3,
+        isNearHigh: false,
+        isNearLow: false,
+        isActiveCoin: true,
+        exchangeUrl: `https://www.binance.com/en/futures/${p.symbol}`,
+      };
+    })
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -419,6 +429,8 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
 
       const defaultFormation: DetectedFormation = {
         id: `screener_${coin.symbol}_${Date.now()}`,
+        symbol: coin.symbol,
+        patternType: 'range',
         patternKey: 'range',
         name: coin.isNearHigh
           ? 'Тестування 24h High (Спротив)'

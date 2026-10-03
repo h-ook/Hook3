@@ -201,8 +201,8 @@ export async function placeExchangeOrder(
 ): Promise<{ success: boolean; order?: PlacedOrder; message: string; rawResponse?: any }> {
   try {
     const apiKey = creds.apiKey?.trim();
-    const apiSecret = creds.apiSecret?.trim();
-    const isTestnet = !!creds.isTestnet;
+    const apiSecret = (creds.secretKey || creds.apiSecret)?.trim();
+    const isTestnet = !!(creds.testnet || creds.isTestnet);
     const marketType = creds.marketType || 'futures';
     const symbol = cleanSymbol(params.symbol);
 
@@ -214,11 +214,12 @@ export async function placeExchangeOrder(
       return { success: false, message: 'Кількість ордера повинна бути більшою за 0' };
     }
 
-    if ((params.type === 'LIMIT' || params.type === 'STOP') && (!params.price || params.price <= 0)) {
+    const orderTypeStr = params.type as string;
+    if ((orderTypeStr === 'LIMIT' || orderTypeStr === 'STOP') && (!params.price || params.price <= 0)) {
       return { success: false, message: 'Для лімітної заявки необхідно вказати ціну' };
     }
 
-    if ((params.type === 'STOP_MARKET' || params.type === 'STOP' || params.type === 'TAKE_PROFIT_MARKET' || params.type === 'TAKE_PROFIT') && (!params.stopPrice || params.stopPrice <= 0)) {
+    if ((orderTypeStr === 'STOP_MARKET' || orderTypeStr === 'STOP' || orderTypeStr === 'TAKE_PROFIT_MARKET' || orderTypeStr === 'TAKE_PROFIT') && (!params.stopPrice || params.stopPrice <= 0)) {
       return { success: false, message: 'Для стоп або тейк-профіт заявки необхідно вказати тригерну ціну (stopPrice)' };
     }
 
@@ -242,27 +243,27 @@ export async function placeExchangeOrder(
         }
 
         // Map order types to Binance Futures API
-        if (params.type === 'MARKET') {
+        if (orderTypeStr === 'MARKET') {
           payload.type = 'MARKET';
-        } else if (params.type === 'LIMIT') {
+        } else if (orderTypeStr === 'LIMIT') {
           payload.type = 'LIMIT';
           payload.price = params.price;
           payload.timeInForce = params.timeInForce || 'GTC';
-        } else if (params.type === 'STOP_MARKET') {
+        } else if (orderTypeStr === 'STOP_MARKET') {
           payload.type = 'STOP_MARKET';
           payload.stopPrice = params.stopPrice;
           if (params.reduceOnly) payload.reduceOnly = 'true';
-        } else if (params.type === 'STOP') {
+        } else if (orderTypeStr === 'STOP') {
           payload.type = 'STOP';
           payload.stopPrice = params.stopPrice;
           payload.price = params.price || params.stopPrice;
           payload.timeInForce = params.timeInForce || 'GTC';
           if (params.reduceOnly) payload.reduceOnly = 'true';
-        } else if (params.type === 'TAKE_PROFIT_MARKET') {
+        } else if (orderTypeStr === 'TAKE_PROFIT_MARKET') {
           payload.type = 'TAKE_PROFIT_MARKET';
           payload.stopPrice = params.stopPrice;
           if (params.reduceOnly) payload.reduceOnly = 'true';
-        } else if (params.type === 'TAKE_PROFIT') {
+        } else if (orderTypeStr === 'TAKE_PROFIT') {
           payload.type = 'TAKE_PROFIT';
           payload.stopPrice = params.stopPrice;
           payload.price = params.price || params.stopPrice;
@@ -300,8 +301,9 @@ export async function placeExchangeOrder(
           marketType: 'futures',
           side: data.side,
           type: params.type,
-          price: data.price ? parseFloat(data.price) : params.price,
+          price: (data.price ? parseFloat(data.price) : params.price) || 0,
           stopPrice: data.stopPrice ? parseFloat(data.stopPrice) : params.stopPrice,
+          quantity: parseFloat(data.origQty || params.quantity.toString()),
           origQty: parseFloat(data.origQty || params.quantity.toString()),
           executedQty: parseFloat(data.executedQty || '0'),
           status: data.status || 'NEW',
@@ -310,9 +312,9 @@ export async function placeExchangeOrder(
 
         const sideLabel = params.side === 'BUY' ? 'Купівля' : 'Продаж';
         const typeLabel =
-          params.type === 'LIMIT' ? 'Лімітна' :
-          params.type === 'MARKET' ? 'По ринку' :
-          params.type === 'STOP_MARKET' || params.type === 'STOP' ? 'Стоп-лос' : 'Тейк-профіт';
+          orderTypeStr === 'LIMIT' ? 'Лімітна' :
+          orderTypeStr === 'MARKET' ? 'По ринку' :
+          orderTypeStr === 'STOP_MARKET' || orderTypeStr === 'STOP' ? 'Стоп-лос' : 'Тейк-профіт';
 
         return {
           success: true,
@@ -373,7 +375,8 @@ export async function placeExchangeOrder(
           marketType: 'spot',
           side: data.side,
           type: params.type,
-          price: data.price ? parseFloat(data.price) : params.price,
+          price: (data.price ? parseFloat(data.price) : params.price) || 0,
+          quantity: parseFloat(data.origQty || params.quantity.toString()),
           origQty: parseFloat(data.origQty || params.quantity.toString()),
           executedQty: parseFloat(data.executedQty || '0'),
           status: data.status || 'NEW',
@@ -395,8 +398,8 @@ export async function placeExchangeOrder(
       const timestamp = Date.now().toString();
       const recvWindow = '5000';
 
-      const isConditional = params.type === 'STOP_MARKET' || params.type === 'STOP' || params.type === 'TAKE_PROFIT_MARKET' || params.type === 'TAKE_PROFIT';
-      const orderType = (params.type === 'MARKET' || params.type === 'STOP_MARKET' || params.type === 'TAKE_PROFIT_MARKET') ? 'Market' : 'Limit';
+      const isConditional = orderTypeStr === 'STOP_MARKET' || orderTypeStr === 'STOP' || orderTypeStr === 'TAKE_PROFIT_MARKET' || orderTypeStr === 'TAKE_PROFIT';
+      const orderType = (orderTypeStr === 'MARKET' || orderTypeStr === 'STOP_MARKET' || orderTypeStr === 'TAKE_PROFIT_MARKET') ? 'Market' : 'Limit';
 
       const reqBody: Record<string, any> = {
         category: marketType === 'spot' ? 'spot' : 'linear',
@@ -452,8 +455,9 @@ export async function placeExchangeOrder(
         marketType,
         side: params.side,
         type: params.type,
-        price: params.price,
+        price: params.price || 0,
         stopPrice: params.stopPrice,
+        quantity: params.quantity,
         origQty: params.quantity,
         executedQty: 0,
         status: 'NEW',
@@ -483,8 +487,8 @@ export async function fetchOpenOrders(
 ): Promise<{ success: boolean; orders: PlacedOrder[]; message?: string }> {
   try {
     const apiKey = creds.apiKey?.trim();
-    const apiSecret = creds.apiSecret?.trim();
-    const isTestnet = !!creds.isTestnet;
+    const apiSecret = (creds.secretKey || creds.apiSecret)?.trim();
+    const isTestnet = !!(creds.testnet || creds.isTestnet);
     const marketType = creds.marketType || 'futures';
 
     if (!apiKey || !apiSecret) {
@@ -524,6 +528,7 @@ export async function fetchOpenOrders(
           type: o.type,
           price: parseFloat(o.price || '0'),
           stopPrice: parseFloat(o.stopPrice || '0'),
+          quantity: parseFloat(o.origQty || '0'),
           origQty: parseFloat(o.origQty || '0'),
           executedQty: parseFloat(o.executedQty || '0'),
           status: o.status,
@@ -562,6 +567,7 @@ export async function fetchOpenOrders(
           type: o.type,
           price: parseFloat(o.price || '0'),
           stopPrice: parseFloat(o.stopPrice || '0'),
+          quantity: parseFloat(o.origQty || '0'),
           origQty: parseFloat(o.origQty || '0'),
           executedQty: parseFloat(o.executedQty || '0'),
           status: o.status,
@@ -633,10 +639,14 @@ export async function cancelExchangeOrder(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const apiKey = creds.apiKey?.trim();
-    const apiSecret = creds.apiSecret?.trim();
-    const isTestnet = !!creds.isTestnet;
+    const apiSecret = (creds.secretKey || creds.apiSecret)?.trim();
+    const isTestnet = !!(creds.testnet || creds.isTestnet);
     const marketType = creds.marketType || 'futures';
     const cleanSym = cleanSymbol(symbol);
+
+    if (!apiKey || !apiSecret) {
+      return { success: false, message: 'API ключі не налаштовані' };
+    }
 
     if (creds.exchange === 'binance') {
       const baseUrl = marketType === 'futures'
@@ -710,10 +720,14 @@ export async function cancelAllExchangeOrders(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const apiKey = creds.apiKey?.trim();
-    const apiSecret = creds.apiSecret?.trim();
-    const isTestnet = !!creds.isTestnet;
+    const apiSecret = (creds.secretKey || creds.apiSecret)?.trim();
+    const isTestnet = !!(creds.testnet || creds.isTestnet);
     const marketType = creds.marketType || 'futures';
     const cleanSym = cleanSymbol(symbol);
+
+    if (!apiKey || !apiSecret) {
+      return { success: false, message: 'API ключі не налаштовані' };
+    }
 
     if (creds.exchange === 'binance') {
       if (marketType === 'futures') {
